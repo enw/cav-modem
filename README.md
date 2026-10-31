@@ -1,5 +1,7 @@
 # cav-modem
 
+**[Live demo](https://enw.github.io/cav-modem/)** — open on both devices to try the audio modem.
+
 A small browser page that sends short UTF-8 text through a speaker and receives it through a microphone. Single-tone four-frequency modulation, 64-byte payloads, CRC-32, and Send / Listen / Stop. Messages stay local; there is no backend message transport.
 
 ## Run locally
