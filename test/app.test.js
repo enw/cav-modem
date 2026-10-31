@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {encode,synthesize,DUAL_PROFILE} from '../modem.js';
-const elements=new Map(['message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':'',textContent:'',disabled:false}]));
+import {encode,synthesize,DUAL_PROFILE,musicalProfile} from '../modem.js';
+const elements=new Map(['message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
 class Context {
@@ -55,4 +55,18 @@ test('mode selection configures both roles and is locked during activity',async(
   for(let i=0;i<6;i++)worklet.port.onmessage({data:new Float32Array(2048)});
   assert.equal(el('received').textContent,'pair hello');assert.match(el('checksum').textContent,/Dual-tone pairs/);
   stop();assert.equal(el('mode').disabled,false);el('mode').value='fsk';el('mode').onchange();
+});
+
+
+test('musical controls report computed timing, lock together and receive with the selected dictionary',async()=>{
+  el('mode').value='musical';el('mode').onchange();assert.equal(el('music-controls').hidden,false);
+  el('tone-count').value='32';el('scale').value='minor';el('order').value='shuffled';el('tonic').value='9';el('order').onchange();
+  assert.match(el('profile-details').textContent,/32-tone A4 natural minor/);assert.match(el('count').textContent,/baud/);
+  el('listen').onclick();await flush();for(const id of ['mode','tone-count','tonic','scale','order'])assert.equal(el(id).disabled,true);
+  const p=musicalProfile({count:32,tonic:9,scale:'minor',order:'shuffled'}),audio=synthesize(encode('music',p),48000,p);
+  for(let i=0;i<audio.length;i+=2048)worklet.port.onmessage({data:audio.subarray(i,i+2048)});
+  for(let i=0;i<6;i++)worklet.port.onmessage({data:new Float32Array(2048)});
+  assert.equal(el('received').textContent,'music');assert.match(el('checksum').textContent,/32-tone A4 natural minor/);
+  stop();for(const id of ['mode','tone-count','tonic','scale','order'])assert.equal(el(id).disabled,false);
+  el('mode').value='fsk';el('mode').onchange();assert.equal(el('music-controls').hidden,true);
 });

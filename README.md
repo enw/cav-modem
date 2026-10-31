@@ -2,7 +2,7 @@
 
 **[Live demo](https://enw.github.io/cav-modem/)** — open on both devices to try the audio modem.
 
-A small browser page that sends short UTF-8 text through a speaker and receives it through a microphone. Selectable four-tone FSK baseline or experimental dual-tone pairs, 64-byte payloads, CRC-32, and Send / Listen / Stop. Select the same mode on both devices; both profiles run at 50 raw bits/s. Messages stay local; there is no backend message transport.
+A small browser page that sends short UTF-8 text through a speaker and receives it through a microphone. Selectable classic four-tone FSK, dual-tone pairs, or experimental musical FSK, 64-byte payloads, CRC-32, and Send / Listen / Stop. Select the same mode and settings on both devices. Classic and dual-tone run at 50 raw bits/s; musical rates depend on pitch spacing and are displayed on the page. Messages stay local; there is no backend message transport.
 
 ## Run locally
 
@@ -24,7 +24,7 @@ npm test
 
 Open http://localhost:8080/browser-check.html and choose **Run browser audio check** for generated audio through a real browser OfflineAudioContext and AudioWorklet. This test neither captures the microphone nor plays sound.
 
-On 31 October 2026, eight Node tests passed: CRC vectors, exact UTF-8 and boundaries, malformed frames, 44.1/48 kHz sample loopback, corruption recovery, truncation/reset, deterministic added noise, and mocked UI lifecycle/error handling. Chrome's offline AudioWorklet check passed. Browser UI checks confirmed oversized emoji input disables Send, Send enters transmitting state, and Stop restores idle controls. The dual-tone experiment now has 18 passing Node tests and a passing Chrome offline AudioWorklet check for both profiles. These are software checks, not physical two-device acceptance. Microphone permission and capture were not activated during verification.
+The current local experiment has 29 passing Node tests, including all 240 musical dictionary configurations and individual-tone classifications, variable-width padding, exact UTF-8 boundaries, wrong profiles, malformed frames, channel simulations, and mocked UI lifecycle/error handling. Chrome's offline AudioWorklet check passes 22 profiles: classic, dual-tone, and all musical count/scale/order combinations at C4. No microphone is activated by these checks. Physical success has only been user-reported for a short baseline FSK message; repeated acceptance for the new profiles remains open.
 
 ## Try two devices
 
@@ -39,4 +39,8 @@ Record devices, OS/browser versions, capture settings, sample rates, distance, o
 
 See the [wire profile](WIRE-FORMAT.md), [tickets](TICKETS.md), and original [proposal](browser-audio-modem-proposal.md).
 
-See the [roadmap](ROADMAP.md) for the dual-tone comparison and the next exploration of a musically beautiful tone dictionary. Dual-tone software checks do not establish physical reliability.
+## Musical experiment
+
+Choose Musical FSK, then 4/8/16/32 tones, a root (C4–B4), major or natural minor, and ascending or fixed-seed shuffled mapping. Both devices derive the same dictionary; no independent randomness is used. The 64 option is explicitly microtonal: scale notes plus logarithmic midpoints, not 64 consecutive notes. Range, minimum separation, symbol timing, baud, raw bit rate and duration are shown. It is not a speed upgrade and can reach poorly reproduced high pitches. Low audio sample rates that cannot support a profile fail explicitly.
+
+Start physical comparisons at 4/8 tones. Musical beauty, reception on hardware, and 32/64-tone practicality are unverified. See the [wire specification](WIRE-FORMAT.md) for exact generation, shuffle, frame, padding and timing rules, and the [roadmap](ROADMAP.md) for evaluation and deferred experiments.

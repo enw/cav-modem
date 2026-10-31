@@ -1,24 +1,27 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Modem browser check</title><body><h1>Offline audio check</h1><p>This test uses generated samples only. No microphone, speaker playback, or network message transport.</p><button id="run">Run browser audio check</button><pre id="result">Not run</pre><script type="module">
-import {encode,synthesize,Receiver,PROFILES} from './modem.js?rev=dual1';
+import {encode,synthesize,Receiver,PROFILES,musicalProfile} from './modem.js?rev=music1';
 document.querySelector('#run').onclick=async()=>{
   const result=document.querySelector('#result');result.textContent='Running…';
   try {
     const passed=[];
-    for(const profile of Object.values(PROFILES)) {
+    const profiles=[...Object.values(PROFILES)];
+    for(const count of [4,8,16,32,64])for(const scale of ['major','minor'])for(const order of ['ascending','shuffled'])profiles.push(musicalProfile({count,scale,order}));
+    for(const profile of profiles) {
+    result.textContent=`Checking ${profile.name} (${passed.length+1}/${profiles.length})…`;
     const rate=48000, text='Café — 🙂', samples=synthesize(encode(text,profile),rate,profile).map(value=>value*.005), events=[];
     const audio=new OfflineAudioContext(1,samples.length+rate,rate);
-    await audio.audioWorklet.addModule('./capture-worklet.js?rev=dual1');
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=music1');
     const receiver=new Receiver(rate,event=>events.push(event),profile);
     const capture=new AudioWorkletNode(audio,'capture');capture.port.onmessage=e=>receiver.push(e.data);
     const source=audio.createBufferSource();source.buffer=audio.createBuffer(1,samples.length,rate);source.buffer.copyToChannel(samples,0);
     source.connect(capture);capture.connect(audio.destination);source.start();await audio.startRendering();
     // Posted worklet batches arrive asynchronously after offline rendering.
-    const deadline=performance.now()+3000;
+    const deadline=performance.now()+10000;
     while(!events.some(e=>e.type==='message')&&performance.now()<deadline) await new Promise(r=>setTimeout(r,20));
     if(events.filter(e=>e.type==='message').length!==1||events.find(e=>e.type==='message').text!==text) throw new Error(JSON.stringify(events));
     passed.push(profile.name);
     }
-    result.textContent=`PASS: ${passed.join(' and ')}. Quiet Web Audio buffers (gain 0.005) → AudioWorklet batches → exact UTF-8 + CRC. No physical path tested.`;
+    result.textContent=`PASS: ${passed.length} profiles: classic FSK, dual-tone, and every musical count/scale/order combination (C4). Quiet Web Audio buffers (gain 0.005) → AudioWorklet batches → exact UTF-8 + CRC. No physical path tested.`;
   }catch(error){result.textContent='FAIL: '+error.message;}
 };
 </script></body></html>

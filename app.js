@@ -1,15 +1,20 @@
-import {encode,synthesize,Receiver,detectTone,PROFILES} from './modem.js?rev=dual1';
+import {encode,synthesize,Receiver,detectTone,PROFILES,musicalProfile,frameDuration} from './modem.js?rev=music1';
 const $=id=>document.getElementById(id);
-const BUILD='dual1';
-const selectedProfile=()=>PROFILES[$('mode').value];
+const BUILD='music1';
+const profileControls=['mode','tone-count','tonic','scale','order'];
+const selectedProfile=()=>$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):PROFILES[$('mode').value];
 let context,stream,source,capture,receiver,epoch=0,active=false;
 function status(text) { $('status').textContent=text; }
 function update() {
-  $('mode').disabled=active;
+  for(const id of profileControls) $(id).disabled=active;
+  $('music-controls').hidden=$('mode').value!=='musical';
   const profile=selectedProfile();
-  $('profile-details').textContent=`${profile.name} · ${profile.dictionary.map(pair=>pair.join('+')).join(' / ')} Hz · 40 ms symbols · 50 raw bits/s · 64-byte limit · CRC-32`;
+  $('music-summary').textContent=profile.id==='musical'?`Experimental · ${profile.range[0].toFixed(1)}–${profile.range[1].toFixed(1)} Hz · closest gap ${profile.minGap.toFixed(2)} Hz · ${profile.seconds*1000} ms symbols. ${profile.microtonal?'64 uses scale notes plus logarithmic midpoints (microtonal), not 64 consecutive scale notes. ':''}Higher pitches may be weak on speakers or microphones; no physical reliability established.`:'';
+  const seconds=context?Math.round(context.sampleRate*profile.seconds)/context.sampleRate:profile.seconds;
+  const rate=`${(1/seconds).toFixed(2)} baud · ${(profile.bits/seconds).toFixed(2)} raw bits/s`;
+  $('profile-details').textContent=`${profile.name} · ${profile.dictionary.map(pair=>pair.map(hz=>Number(hz.toFixed(2))).join('+')).join(' / ')} Hz · ${(seconds*1000).toFixed(1)} ms symbols · ${rate} · 64-byte limit · CRC-32`;
   const bytes=new TextEncoder().encode($('message').value).length;
-  $('count').textContent=`${bytes} / 64 UTF-8 bytes${bytes>0&&bytes<=64 ? ` · ${(0.96+(bytes+7)*.16).toFixed(2)} seconds` : ''}`;
+  $('count').textContent=`${bytes} / 64 UTF-8 bytes${bytes>0&&bytes<=64 ? ` · ${frameDuration(bytes,profile,context?.sampleRate).toFixed(2)} seconds` : ''} · ${rate}`;
   $('send').disabled=active||bytes<1||bytes>64; $('listen').disabled=active; $('stop').disabled=!active;
 }
 export function stop(message='Stopped. Incomplete frame discarded.') {
@@ -29,6 +34,7 @@ async function start(mode) {
     if(!AudioContext) throw new Error('Web Audio is unavailable in this browser.');
     const audio=new AudioContext();context=audio;
     await audio.resume(); if(token!==epoch) return;
+    update();
     if(audio.state!=='running') throw new Error('Audio is suspended. Try again from a button click.');
     audio.onstatechange=()=>{if(token===epoch && audio.state==='suspended') stop('Audio suspended. Keep the tab awake and try again.');};
     if(mode==='send') {
@@ -46,9 +52,10 @@ async function start(mode) {
     stream=acquired;
     const track=stream.getAudioTracks()[0];
     track.onended=()=>{if(token===epoch) stop('Microphone disconnected. Choose Listen to retry.');};
-    await audio.audioWorklet.addModule('./capture-worklet.js?rev=dual1');if(token!==epoch) return;
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=music1');if(token!==epoch) return;
     let syncs=0, failures=0, frames=0, metered=0, sum=0, peak=0;
-    const settings={build:BUILD,mode:profile.name,profileByte:profile.version,audioSampleRate:audio.sampleRate,microphone:track.label||'Default input',capture:track.getSettings()};
+    const settings={build:BUILD,mode:profile.name,profilePrefix:profile.prefix,symbolMilliseconds:1000*Math.round(audio.sampleRate*profile.seconds)/audio.sampleRate,audioSampleRate:audio.sampleRate,microphone:track.label||'Default input',capture:track.getSettings()};
+    const toneWindow=new Float32Array(Math.round(audio.sampleRate*profile.seconds*.5));let toneFilled=0;
     const showDetails=()=>{ $('diagnostics').textContent=JSON.stringify({...settings,syncs,failures,frames},null,2); };
     receiver=new Receiver(audio.sampleRate,event=>{
       if(event.type==='message') { frames++; $('received').textContent=event.text; $('checksum').textContent=`${profile.name} · CRC-32 passed · exact UTF-8 frame`;status('Valid message received. Still listening…'); }
@@ -61,12 +68,16 @@ async function start(mode) {
     capture.port.onmessage=event=>{if(token===epoch) {
       try {
         for(const sample of event.data) { sum+=sample*sample; peak=Math.max(peak,Math.abs(sample)); }
-        metered+=event.data.length;
+        const chunk=event.data;
+        if(chunk.length>=toneWindow.length) toneWindow.set(chunk.subarray(chunk.length-toneWindow.length));
+        else { toneWindow.copyWithin(0,chunk.length);toneWindow.set(chunk,toneWindow.length-chunk.length); }
+        toneFilled=Math.min(toneWindow.length,toneFilled+chunk.length);
+        metered+=chunk.length;
         if(metered>=audio.sampleRate*.25) {
           const rms=Math.sqrt(sum/metered), db=20*Math.log10(Math.max(rms,1e-10));
-          const tone=detectTone(event.data,audio.sampleRate,0,Math.round(audio.sampleRate*.02),profile);
+          const tone=toneFilled===toneWindow.length?detectTone(toneWindow,audio.sampleRate,0,toneWindow.length,profile):-1;
           const level=rms<1e-5?'No input audio':`Input audio: ${db.toFixed(0)} dBFS`;
-          const toneLabel=tone<0?'no modem-frequency tone':`tone near ${profile.dictionary[tone].join(' + ')} Hz (not proof of a frame)`;
+          const toneLabel=tone<0?'no modem-frequency tone':`tone near ${profile.dictionary[tone].map(hz=>Number(hz.toFixed(1))).join(' + ')} Hz (not proof of a frame)`;
           $('input-meter').value=Math.max(-100,Math.min(0,db));
           $('input-level').textContent=`${level} · ${toneLabel}${peak>=.98?' · input near full scale: lower sender volume':''} · ${syncs} syncs · ${failures} rejected · ${frames} received`;
           metered=0;sum=0;peak=0;
@@ -82,7 +93,7 @@ async function start(mode) {
     status('Listening. Send from the other device.');
   } catch(error) { if(token===epoch) stop(`Unable to ${mode}: ${error.message} (${error.name}). Retry when ready.`); }
 }
-$('send').onclick=()=>start('send');$('listen').onclick=()=>start('listen');$('stop').onclick=()=>stop();$('message').oninput=update;$('mode').onchange=()=>{stop('Mode changed. Select the same mode on the other device.');$('diagnostics').textContent=`Receiver build ${BUILD} · ${selectedProfile().name}`;};
+$('send').onclick=()=>start('send');$('listen').onclick=()=>start('listen');$('stop').onclick=()=>stop();$('message').oninput=update;for(const id of profileControls) $(id).onchange=()=>{stop('Mode changed. Select the same mode on the other device.');$('diagnostics').textContent=`Receiver build ${BUILD} · ${selectedProfile().name}`;};
 window.addEventListener('pagehide',()=>stop());
 $('diagnostics').textContent=`Receiver build ${BUILD}. Microphone starts only when you choose Listen.`;
 update();

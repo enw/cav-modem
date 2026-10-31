@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {encode,symbols,PROFILE,DUAL_PROFILE,Receiver} from '../modem.js';
+import {encode,symbols,PROFILE,DUAL_PROFILE,Receiver,musicalProfile} from '../modem.js';
 
 // Deterministic acoustic-channel approximation, not physical acceptance.
 function channel(text,{txRate=48000,rate=48000,gain=1,onset=.107,ppm=0,phase=.73,echo=0,delay=.012,noise=0,profile=PROFILE}={}) {
-  const sequence=symbols(encode(text,profile),profile), n=Math.round(txRate*.04), ramp=Math.round(txRate*.002);
+  const sequence=symbols(encode(text,profile),profile), n=Math.round(txRate*profile.seconds), ramp=Math.round(txRate*.002);
   const source=new Float32Array(sequence.length*n);
   for(let s=0;s<sequence.length;s++) for(let i=0;i<n;i++) {
     const pair=profile.dictionary[sequence[s]];
@@ -72,5 +72,22 @@ test('dual-tone maximum frames survive quiet gain, noise, onset, phase, resampli
 test('dual-tone noise-only and buried signals produce no successful messages',()=>{
   for(const options of [{gain:0,noise:.001},{gain:0,noise:.1},{gain:.001,noise:.1}]) {
     assert.equal(channel('noise',{...options,profile:DUAL_PROFILE}).filter(e=>e.type==='message').length,0);
+  }
+});
+
+
+test('musical counts/scales/orderings tolerate quiet noisy audio, offsets, resampling and modest drift',()=>{
+  for(const count of [4,8,16,32,64])for(const scale of ['major','minor'])for(const order of ['ascending','shuffled']) {
+    const profile=musicalProfile({count,scale,order});
+    const options={profile,txRate:44100,rate:48000,gain:.005,noise:.00005,ppm:order==='ascending'?250:-250,onset:.137,phase:2.1,echo:.15};
+    const events=channel('Café 🙂',options);
+    assert.deepEqual(events.filter(e=>e.type==='message').map(e=>e.text),['Café 🙂'],JSON.stringify({count,scale,order}));
+  }
+});
+
+test('musical noise-only input never reports a valid message',()=>{
+  for(const count of [4,8,16,32,64]) {
+    const profile=musicalProfile({count,order:'shuffled'});
+    assert.equal(channel('noise',{profile,gain:0,noise:.02}).filter(e=>e.type==='message').length,0);
   }
 });

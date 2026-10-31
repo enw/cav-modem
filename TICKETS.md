@@ -13,4 +13,7 @@ Physical progress: the user reported that a short `hello world` message crossed 
 
 - [x] 06 Add selectable dual-tone pairs with a fixed dictionary, distinct preamble/profile byte, shared frame/CRC, cross-mode rejection and regression tests. Four-tone FSK remains the default. Evidence: 18 passing Node tests and Chrome offline AudioWorklet loopback for both modes. Local implementation only; no publication authorized for this experiment.
 - [ ] 07 Compare dual-tone and FSK on physical device pairs using identical messages and recorded conditions. Include wrong-mode and muted-path checks; do not infer success from synthetic loopback.
-- [ ] 08 Explore a musically beautiful tone dictionary as the next design experiment. See ROADMAP.md; no musical profile implemented yet.
+- [x] 08 Implement musical FSK dictionaries: 4/8/16/32 notes, major/natural minor with tonic selection, deterministic shuffle, and explicitly microtonal 64-tone extension. Shared frame/CRC with exact profile descriptors and variable-width bit packing; timing derives from minimum pitch separation. Physical beauty and reliability remain unqualified.
+- [ ] 09 Evaluate musical dictionaries on real devices and with listeners. Start at 4/8; compare key, scale and shuffle; treat 32/64 as experimental. Record results against the FSK baseline.
+
+Musical implementation evidence: 29 Node tests and 22 Chrome synthetic AudioWorklet profiles pass. Musical configuration/individual-tone checks cover all 240 combinations. No physical microphone or listening test performed by the agent. Build `music1`; publication pending.

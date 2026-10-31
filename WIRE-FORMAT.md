@@ -48,7 +48,7 @@ The first receiver does not track oscillator drift during a frame. Detection thr
 
 Build `rx2` shows a live RMS input meter (dBFS) every quarter second while listening, plus a label when the latest sample window contains a tone near one of the four modem frequencies. Ordinary sound can move the meter; a frequency match alone is not synchronization or receipt. The main status changes on full preamble synchronization, frame rejection, and valid CRC/UTF-8 receipt. Details include selected microphone, actual capture settings, sample rate, build, and counts of synchronized, rejected, and received frames. Stop clears the meter.
 
-For a retest of the current experiment, check `dual1` and the selected profile in details, start Listen before Send, and observe: no input audio suggests the selected input or audio route; input without modem-frequency tones suggests noise or tone filtering; tones without synchronization suggest timing/noise or a missed preamble; a synchronized rejected frame indicates a decode/integrity failure. These are diagnostic clues, not established physical causes. Microphone mute/disconnect and suspended audio get explicit status messages.
+For a retest of the current experiment, check `music1` and the selected profile in details, start Listen before Send, and observe: no input audio suggests the selected input or audio route; input without modem-frequency tones suggests noise or tone filtering; tones without synchronization suggest timing/noise or a missed preamble; a synchronized rejected frame indicates a decode/integrity failure. These are diagnostic clues, not established physical causes. Microphone mute/disconnect and suspended audio get explicit status messages.
 
 Validation: 11 Node tests pass, including quiet signals at gains 0.005 and 0.001 (previously no sync), maximum frames with 44.1/48 kHz resampling, arbitrary onset/phase, ±500/1000 ppm clock drift and short echoes, noise rejection, and UI input-meter/frame status/Stop cleanup. Chrome offline audio through the real AudioWorklet passed at gain 0.005. This does not establish physical reliability for the new receiver.
 
@@ -83,3 +83,76 @@ The detector retains the baseline scan cadence and central 20 ms window, but mea
 All length bounds, exact UTF-8 checks, rejection/resynchronization, Stop behavior and 12.32-second maximum sample budget remain shared. No automatic clock tracking is added. Deterministic tests cover both profiles, cross-mode rejection, quiet gain, noise, timing offsets, different sample rates, modest clock drift and short echo; these fixtures are not an acoustic-channel guarantee. Follow the [roadmap](ROADMAP.md) for physical comparison and the next musical dictionary exploration.
 
 Current experiment verification: all 18 Node tests pass, including the retained FSK suite, dual-tone frame/CRC vectors, invalid pairs, wrong-mode rejection, corrupt/truncated frames and resynchronization, channel simulations and mode-locking UI behavior. Chrome offline AudioWorklet loopback passes for both modes at gain 0.005. No physical dual-tone microphone test has been performed.
+
+## Musical FSK experiment
+
+Build `music1` preserves the classic and dual-tone profiles and adds single-tone musical FSK with 4, 8, 16, 32 or an explicitly microtonal 64-tone dictionary. Select the same mode, count, root, scale and ordering on both devices. Default musical settings are 8 tones, C4, major, ascending. Classic FSK remains the page's initial mode. All profile controls are locked during Send/Listen.
+
+### Pitches and dictionary ordering
+
+Root choices are the twelve pitch classes C through B in octave 4: MIDI note `60 + tonic`, with tonic codes C=0, C♯=1, D=2, E♭=3, E=4, F=5, F♯=6, G=7, A♭=8, A=9, B♭=10, B=11. Octave is fixed, not negotiated. Equal-tempered frequency is `440 × 2^((midi − 69)/12)` Hz. No frequency rounding is applied on the wire; rounded UI values are display-only.
+
+Major scale semitone steps are `[0,2,4,5,7,9,11]`; natural minor steps are `[0,2,3,5,7,8,10]`. For degree `i`, use `12 × floor(i/7) + steps[i mod 7]` above the root. Counts 4/8/16/32 take the first N consecutive scale degrees, one distinct frequency per symbol. For example, C4 major with 8 tones is C4 D4 E4 F4 G4 A4 B4 C5. The dictionary constrains available pitches; arbitrary payloads do not become composed melodies, and pleasantness is not established by a scale name.
+
+The 64 option uses degrees `i/2` for i=0…63: even indices are scale notes; odd indices are midway in semitone/log-frequency space between consecutive scale notes. Thus a one-semitone scale interval acquires a quarter-tone midpoint. These are **not 64 consecutive major/minor scale notes**; the microtonal option is separately labeled in the UI. It keeps 64 unique tones without octave aliasing. At C4 its range is 261.63–5919.91 Hz; at B4 it is 493.88–11175.30 Hz. High pitches and very close low pitches need physical qualification.
+
+Ascending ordering maps symbol value i to dictionary entry i. Shuffled ordering applies this exact Fisher–Yates permutation to the ascending list:
+
+1. Set unsigned 32-bit state to `0x43415631` each time a profile is derived.
+2. For i=N−1 down to 1, set `state = (1664525 × state + 1013904223) mod 2^32` using unsigned integer arithmetic.
+3. Set `j = floor((state / 2^32) × (i+1))`; swap entries i and j.
+
+No per-device or per-message randomness is used. The seed and algorithm are fixed by profile version 03. The 8-tone permutation is `[1,4,6,5,7,3,2,0]`. Changing key/scale transposes or changes frequencies, but does not independently reshuffle the indices. A different seed or pitch-generation rule would require a new profile version.
+
+### Timing and sample-rate guard
+
+Compute the minimum adjacent gap Δf from the sorted ascending frequencies, before shuffling. Symbol duration in seconds is `ceil(100 × max(0.04, 4/Δf)) / 100`, rounded up to a 10 ms grid. The central half-symbol analysis window then spans at least two periods of the smallest frequency gap. This is a design safeguard, not a guarantee of acoustic separation. The window is much longer than the classic 20 ms window. Each symbol retains 2 ms edge ramps and 0.45 peak sine amplitude.
+
+Each device uses `n = round(sampleRate × seconds)` samples per symbol; the receiver scans every `round(n/4)` samples and analyzes the central `round(n/2)` samples. The app displays computed baud (`sampleRate/n`), raw bit rate (`bitsPerSymbol × baud`), range, minimum spacing and full message duration. Before an audio context exists, it displays nominal profile timing. It never assumes musical modes work at 25 baud.
+
+C4 examples; ordering does not change these rates:
+
+| Count | Bits/symbol | Range Hz | Major symbol ms / raw bits/s | Minor symbol ms / raw bits/s | Maximum frame seconds major / minor |
+| --- | --- | --- | --- | --- | --- |
+| 4 | 2 | 261.63–349.23 | 210 / 9.52 | 230 / 8.70 | 68.04 / 74.52 |
+| 8 | 3 | 261.63–523.25 | 210 / 14.29 | 230 / 13.04 | 47.04 / 51.52 |
+| 16 | 4 | 261.63–1174.66 | 210 / 19.05 | 230 / 17.39 | 36.54 / 40.02 |
+| 32 | 5 | 261.63–5587.65 | 210 / 23.81 | 230 / 21.74 | 30.24 / 33.12 |
+| 64 microtonal | 6 | 261.63–5919.91 | 420 / 14.29 | 470 / 12.77 | 52.08 / 58.28 |
+
+C4 major's minimum gap is about 19.60 Hz (9.66 Hz for the 64 subdivision); C4 minor's is about 17.46 Hz (8.61 Hz for 64). Higher roots change spacing and timing. The 64 mode is slower than 32 under this safeguard. Sixty-four symbol choices at 25 baud would mathematically give 150 raw bits/s, but that rate is **not implemented or validated** here.
+
+Both synthesis and receiver creation reject a profile whose highest frequency is at or above 0.45 × the actual audio-context sample rate. This leaves margin below Nyquist; it does not establish the speaker/microphone passband. A high-root 32/64 profile can be unsupported at a low sample rate even while classic FSK works. The UI reports the error rather than aliasing frequencies. Bluetooth routes, device processing, high-frequency rolloff, harmonics, echoes and clock drift can still prevent reception. Use foreground tabs and compare physical results before increasing count.
+
+### Musical frame and packing
+
+Musical preamble symbol values for alphabet size N are:
+
+```text
+0,N−1,0,N−1,1,N−2,1,N−2,0,2,1,3,2,0,3,1,1,0,2,3,0,3,1,2
+```
+
+It is followed by a seven-byte header:
+
+| Offset | Meaning |
+| --- | --- |
+| 0 | Version/profile `03` |
+| 1 | Bits per symbol: `02`, `03`, `04`, `05`, or `06` (4 through 64 tones) |
+| 2 | Tonic code 0…11, fixed octave 4 |
+| 3 | Scale: 0 major, 1 natural minor |
+| 4 | Order: 0 ascending, 1 fixed-seed shuffle |
+| 5–6 | Big-endian payload byte length, 1…64 |
+
+Untouched UTF-8 payload follows, then the same four-byte big-endian CRC-32/ISO-HDLC of the entire header and payload. A receiver compares every descriptor byte with its selected configuration before accepting the length; unknown/mismatched settings are rejected. Descriptor bytes are CRC-covered, but this is not authentication or negotiation. The 64 algorithm is identified by version 03 plus bits-per-symbol 06.
+
+Concatenate all frame bytes into a single MSB-first bitstream; do not pad individual bytes. Consume k bits per symbol, where k=log2(N). Only the final symbol is padded, with zero bits on its least-significant side. Frame symbol count is `ceil(8 × (payloadBytes + 11) / k)`. The receiver decodes exactly the header-declared bytes and rejects nonzero tail padding as well as excess/truncated byte frames and invalid UTF-8/CRC. Header inspection may end mid-symbol, so those remaining bits are retained as part of the payload stream rather than treated as header padding. Full frame duration is `(24 + frameSymbolCount) × n/sampleRate`.
+
+Frozen frame-byte vectors, excluding preamble and tail padding:
+
+- Text `A`, 8-tone C4 major ascending: `0303000000000141c2858250`.
+- Text `A`, 64-tone C4 natural minor shuffled: `03060001010001411561e322`.
+- Packing byte `ff`: 3-bit symbols `[7,7,6]`; 5-bit `[31,28]`; 6-bit `[63,48]`. The final low bits are padding.
+
+Musical detection uses the baseline gain-relative winning-tone/purity rules across the whole selected dictionary with the longer analysis window. Receive buffering grows geometrically only up to the bounded declared frame, avoiding a full frame copy on every incoming batch; the validated length is cached during capture. Stop discards all state. Failed frames resume synchronization search. Longer musical frames have longer bounded sample deadlines than the original 12.32-second profiles.
+
+Musical verification: 29 Node tests pass. Configuration/descriptor generation and individual-tone classification cover all 240 count/key/scale/order combinations. Maximum UTF-8 acoustic round trips and channel simulations cover all 20 count/scale/order combinations at C4; tests include 3/5/6-bit padding, wrong profiles, corruption, truncation, noise, gain, resampling and ±250 ppm drift. Chrome offline AudioWorklet checks pass 22 profiles (classic, dual, and those 20 musical combinations) at gain 0.005. These are deterministic software fixtures, not physical microphone or listening tests.

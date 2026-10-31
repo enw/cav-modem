@@ -1,7 +1,8 @@
 const FSK_PREAMBLE = [0,3,0,3,0,3,0,3,1,2,3,0,2,1,0,3,2,2,0,1,3,1,2,0];
 const DUAL_PREAMBLE = [3,0,3,0,3,0,3,0,2,1,0,3,1,2,3,0,1,1,3,2,0,2,1,3];
-function profile(id,name,version,dictionary,preamble) {
-  return Object.freeze({id,name,version,seconds:.04,maxBytes:64,
+function profile(id,name,version,dictionary,preamble,options={}) {
+  return Object.freeze({id,name,version,seconds:.04,maxBytes:64,bits:Math.log2(dictionary.length),
+    prefix:Object.freeze([version]),headerBytes:3,...options,
     dictionary:Object.freeze(dictionary.map(pair=>Object.freeze(pair))),
     tones:Object.freeze(dictionary.map(pair=>pair[0])),preamble:Object.freeze(preamble)});
 }
@@ -9,6 +10,74 @@ export const PROFILE = profile('fsk','Four-tone FSK',1,[[1200],[1600],[2000],[24
 export const DUAL_PROFILE = profile('dual','Dual-tone pairs',2,[[900,1900],[900,2300],[1300,1900],[1300,2300]],DUAL_PREAMBLE);
 export const PROFILES = Object.freeze({fsk:PROFILE,dual:DUAL_PROFILE});
 export const PREAMBLE = PROFILE.preamble;
+export const TONICS = Object.freeze(['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B']);
+export const SHUFFLE_SEED = 0x43415631;
+export function musicalProfile({count=8,tonic=0,scale='major',order='ascending'}={}) {
+  if(![4,8,16,32,64].includes(count)||!Number.isInteger(tonic)||tonic<0||tonic>11||
+    !['major','minor'].includes(scale)||!['ascending','shuffled'].includes(order)) throw new Error('Unsupported musical profile');
+  const steps=scale==='major'?[0,2,4,5,7,9,11]:[0,2,3,5,7,8,10];
+  const degree=index=>12*Math.floor(index/7)+steps[index%7];
+  const pitches=Array.from({length:count},(_,i)=>{
+    const at=count===64?i/2:i,whole=Math.floor(at);
+    const semitone=degree(whole)+(at-whole)*(degree(whole+1)-degree(whole));
+    return 440*2**((60+tonic+semitone-69)/12);
+  });
+  const minGap=Math.min(...pitches.slice(1).map((hz,i)=>hz-pitches[i]));
+  const seconds=Math.ceil(Math.max(.04,4/minGap)*100)/100;
+  const dictionary=pitches.map(hz=>[hz]);
+  if(order==='shuffled') {
+    let state=SHUFFLE_SEED;
+    for(let i=count-1;i>0;i--) {
+      state=(Math.imul(state,1664525)+1013904223)>>>0;
+      const j=Math.floor((state/2**32)*(i+1));
+      [dictionary[i],dictionary[j]]=[dictionary[j],dictionary[i]];
+    }
+  }
+  const bits=Math.log2(count), prefix=Object.freeze([3,bits,tonic,scale==='minor'?1:0,order==='shuffled'?1:0]);
+  // Fixed 24-symbol template spanning the selected alphabet, distinct from old modes.
+  const preamble=[0,count-1,0,count-1,1,count-2,1,count-2,0,2,1,3,2,0,3,1,1,0,2,3,0,3,1,2];
+  return profile('musical',`${count}-tone ${TONICS[tonic]}4 ${scale==='minor'?'natural minor':'major'} · ${order}${count===64?' · microtonal':''}`,
+    3,dictionary,preamble,{microtonal:count===64,seconds,prefix,headerBytes:7,minGap,range:Object.freeze([pitches[0],pitches.at(-1)]),
+      config:Object.freeze({count,tonic,scale,order})});
+}
+export function symbolCount(byteCount,profile=PROFILE) { return Math.ceil(byteCount*8/profile.bits); }
+export function frameDuration(payloadBytes,profile=PROFILE,rate) {
+  const total=profile.preamble.length+symbolCount(payloadBytes+profile.headerBytes+4,profile);
+  return rate?total*Math.round(rate*profile.seconds)/rate:total*profile.seconds;
+}
+export function packSymbols(bytes,bits) {
+  const result=[];let value=0,used=0;
+  for(const byte of bytes) for(let shift=7;shift>=0;shift--) {
+    value=(value<<1)|((byte>>shift)&1);
+    if(++used===bits) { result.push(value);value=0;used=0; }
+  }
+  if(used) result.push(value<<(bits-used));
+  return result;
+}
+export function unpackSymbols(values,byteCount,bits,checkPadding=true) {
+  if(values.length!==Math.ceil(byteCount*8/bits)) throw new Error('Truncated symbol stream');
+  const bytes=new Uint8Array(byteCount);let at=0;
+  for(const value of values) {
+    if(!Number.isInteger(value)||value<0||value>=2**bits) throw new Error('Invalid symbol');
+    for(let shift=bits-1;shift>=0;shift--,at++) {
+      const bit=(value>>shift)&1;
+      if(at<byteCount*8) bytes[at>>3]|=bit<<(7-(at%8));
+      else if(checkPadding&&bit) throw new Error('Nonzero frame padding');
+    }
+  }
+  return bytes;
+}
+function payloadLength(bytes,profile) {
+  if(bytes.length<profile.headerBytes) throw new Error('Truncated header');
+  if(profile.prefix.some((value,i)=>bytes[i]!==value)) throw new Error('Unsupported version or wrong mode/profile');
+  const at=profile.prefix.length,length=bytes[at]*256+bytes[at+1];
+  if(length<1||length>64) throw new Error('Invalid payload length');
+  return length;
+}
+function checkSampleRate(rate,profile) {
+  if(!Number.isFinite(rate)||rate<=0||Math.max(...profile.dictionary.flat())>=rate*.45)
+    throw new Error('Sample rate too low for the selected tone range');
+}
 export function crc32(bytes) {
   let crc = 0xffffffff;
   for (const byte of bytes) {
@@ -20,27 +89,25 @@ export function crc32(bytes) {
 export function encode(text,profile=PROFILE) {
   const payload = new TextEncoder().encode(text);
   if (!payload.length || payload.length > 64) throw new Error('Enter 1–64 UTF-8 bytes.');
-  const bytes = new Uint8Array(payload.length + 7);
-  bytes.set([profile.version,0,payload.length]); bytes.set(payload,3);
+  const bytes = new Uint8Array(payload.length + profile.headerBytes+4);
+  bytes.set([...profile.prefix,0,payload.length]);bytes.set(payload,profile.headerBytes);
   new DataView(bytes.buffer).setUint32(bytes.length-4,crc32(bytes.subarray(0,-4)));
   return bytes;
 }
 export function decode(bytes,profile=PROFILE) {
-  if (bytes.length < 7) throw new Error('Truncated frame');
-  if (bytes[0] !== profile.version) throw new Error('Unsupported version or wrong mode');
-  const length = bytes[1]*256+bytes[2];
-  if (length < 1 || length > 64) throw new Error('Invalid payload length');
-  if (bytes.length !== length+7) throw new Error('Truncated or excess frame');
-  const expected = new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(bytes.length-4);
-  if (expected !== crc32(bytes.subarray(0,-4))) throw new Error('Checksum failed');
-  try { return new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(3,-4)); }
+  const length=payloadLength(bytes,profile);
+  if(bytes.length!==length+profile.headerBytes+4) throw new Error('Truncated or excess frame');
+  const expected=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(bytes.length-4);
+  if(expected!==crc32(bytes.subarray(0,-4))) throw new Error('Checksum failed');
+  try { return new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(profile.headerBytes,-4)); }
   catch { throw new Error('Invalid UTF-8'); }
 }
 export function symbols(bytes,profile=PROFILE) {
-  return [...profile.preamble,...Array.from(bytes).flatMap(b=>[b>>>6,(b>>>4)&3,(b>>>2)&3,b&3])];
+  return [...profile.preamble,...packSymbols(bytes,profile.bits)];
 }
 export function synthesize(bytes,rate,profile=PROFILE) {
-  const tones=symbols(bytes,profile), n=Math.round(rate*0.04), ramp=Math.round(rate*0.002);
+  checkSampleRate(rate,profile);
+  const tones=symbols(bytes,profile), n=Math.round(rate*profile.seconds), ramp=Math.round(rate*0.002);
   const samples=new Float32Array(tones.length*n);
   for (let s=0;s<tones.length;s++) for(let i=0;i<n;i++) {
     const gain=Math.min(1,i/ramp,(n-1-i)/ramp);
@@ -74,27 +141,41 @@ export function detectTone(samples,rate,begin=0,count=Math.round(rate*.02),profi
   const second=Math.max(...power.filter((_,i)=>i!==index));
   return best > second*3 && best > energy*count*.20 ? index : -1;
 }
-// Sample-clock receiver: scan every 10 ms; inspect the central 20 ms of each symbol.
+// Scan quarter-symbol steps; analyze the central half. Buffer growth is bounded by frame length.
 export class Receiver {
-  constructor(rate,onEvent,profile=PROFILE) { this.profile=profile; this.rate=rate; this.onEvent=onEvent; this.n=Math.round(rate*.04); this.hop=Math.round(rate*.01); this.reset(); }
-  reset() { this.samples=new Float32Array(0); this.scan=0; this.lock=null; }
+  constructor(rate,onEvent,profile=PROFILE) {
+    checkSampleRate(rate,profile);this.profile=profile;this.rate=rate;this.onEvent=onEvent;
+    this.n=Math.round(rate*profile.seconds);this.hop=Math.round(this.n/4);this.reset();
+  }
+  reset() { this.buffer=new Float32Array(0);this.samples=this.buffer;this.scan=0;this.lock=null;this.length=null; }
+  append(chunk) {
+    const used=this.samples.length,total=used+chunk.length;
+    if(total>this.buffer.length) {
+      const capacity=Math.max(total,this.buffer.length*2,4096);
+      const buffer=new Float32Array(capacity);buffer.set(this.samples);this.buffer=buffer;
+    }
+    this.buffer.set(chunk,used);this.samples=this.buffer.subarray(0,total);
+  }
+  consume(count) {
+    this.buffer.copyWithin(0,count,this.samples.length);
+    this.samples=this.buffer.subarray(0,this.samples.length-count);
+  }
   tone(start) {
     return detectTone(this.samples,this.rate,start+Math.round(this.n*.25),Math.round(this.n*.5),this.profile);
   }
-  readBytes(start,count) {
-    const bytes=new Uint8Array(count);
-    for(let b=0;b<count;b++) for(let j=0;j<4;j++) {
-      const tone=this.tone(start+(b*4+j)*this.n);
+  readBytes(start,count,checkPadding=true) {
+    const values=[];
+    for(let i=0;i<symbolCount(count,this.profile);i++) {
+      const tone=this.tone(start+i*this.n);
       if(tone<0) throw new Error('Signal lost or truncated frame');
-      bytes[b]=(bytes[b]<<2)|tone;
+      values.push(tone);
     }
-    return bytes;
+    return unpackSymbols(values,count,this.profile.bits,checkPadding);
   }
   push(chunk) {
     // Browser batches are small; callers must stream rather than enqueue an entire recording.
     if(chunk.length > this.rate) throw new Error('Audio chunk too large');
-    const next=new Float32Array(this.samples.length+chunk.length);
-    next.set(this.samples); next.set(chunk,this.samples.length); this.samples=next;
+    this.append(chunk);
     const pre=this.profile.preamble.length*this.n;
     while(true) {
       if(this.lock===null) {
@@ -104,25 +185,23 @@ export class Receiver {
           this.scan+=this.hop;
         }
         if(!found) {
-          this.samples=this.samples.slice(this.scan); this.scan=0; return;
+          this.consume(this.scan); this.scan=0; return;
         }
         this.lock=this.scan; this.onEvent({type:'receiving'});
       }
       const start=this.lock+pre;
-      if(start+12*this.n>this.samples.length) return;
+      if(start+symbolCount(this.profile.headerBytes,this.profile)*this.n>this.samples.length) return;
       try {
-        const header=this.readBytes(start,3);
-        if(header[0]!==this.profile.version) throw new Error('Unsupported version or wrong mode');
-        const length=header[1]*256+header[2];
-        if(length<1||length>64) throw new Error('Invalid payload length');
-        const end=start+(length+7)*4*this.n;
+        if(this.length===null) this.length=payloadLength(this.readBytes(start,this.profile.headerBytes,false),this.profile);
+        const byteCount=this.length+this.profile.headerBytes+4;
+        const end=start+symbolCount(byteCount,this.profile)*this.n;
         if(end>this.samples.length) return;
-        const text=decode(this.readBytes(start,length+7),this.profile);
+        const text=decode(this.readBytes(start,byteCount),this.profile);
         this.onEvent({type:'message',text});
-        this.samples=this.samples.slice(end); this.scan=0; this.lock=null;
+        this.consume(end); this.scan=0; this.lock=null;this.length=null;
       } catch(error) {
         this.onEvent({type:'error',message:error.message});
-        this.scan=this.lock+this.hop; this.lock=null;
+        this.scan=this.lock+this.hop; this.lock=null;this.length=null;
       }
     }
   }
