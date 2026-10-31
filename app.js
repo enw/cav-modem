@@ -1,9 +1,22 @@
-import {encode,synthesize,Receiver,detectTone,PROFILES,musicalProfile,frameDuration} from './modem.js?rev=music1';
+import {encode,synthesize,Receiver,detectTone,PROFILES,musicalProfile,frameDuration} from './modem.js?rev=trace1';
 const $=id=>document.getElementById(id);
-const BUILD='music1';
+const BUILD='trace1';
 const profileControls=['mode','tone-count','tonic','scale','order'];
 const selectedProfile=()=>$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):PROFILES[$('mode').value];
 let context,stream,source,capture,receiver,epoch=0,active=false;
+function showTrace(tone=-1) {
+  if(!$('trace-panel').open||!receiver)return;
+  const t=receiver.trace,profile=receiver.profile;
+  const symbol=id=>`${id}@${profile.dictionary[id].map(hz=>hz.toFixed(1)).join('+')}Hz`;
+  $('trace').textContent=`${t.state}
+Last result: ${receiver.traceResult}
+Input probe: ${tone<0?'no recognized tone':symbol(tone)} (not synchronized)
+Frame symbols: ${t.symbolCount}; last 32: ${t.symbols.map(symbol).join(' ')}
+Provisional bytes (${t.bytes.length}): ${t.bytes.map(b=>b.toString(16).padStart(2,'0')).join(' ')}
+ASCII preview: ${t.bytes.map(b=>b>=32&&b<=126?String.fromCharCode(b):'.').join('')}
+Pending bits: ${t.pendingBits}`;
+}
+$('trace-panel').ontoggle=()=>{receiver?.setTracing($('trace-panel').open);$('trace').textContent=$('trace-panel').open?'Waiting for input; provisional / unverified.':'Trace off.';};
 function status(text) { $('status').textContent=text; }
 function update() {
   for(const id of profileControls) $(id).disabled=active;
@@ -23,6 +36,7 @@ export function stop(message='Stopped. Incomplete frame discarded.') {
   if(capture) { capture.port.onmessage=null; capture.disconnect(); capture=null; }
   stream?.getTracks().forEach(track=>track.stop());stream=null;receiver?.reset();receiver=null;
   const old=context;context=null;old?.close().catch(()=>{});
+  $('trace').textContent='Trace cleared. Microphone inactive.';
   $('input-level').textContent='Microphone inactive.';
   $('input-meter').value=-100;
   status(message);update();
@@ -52,7 +66,7 @@ async function start(mode) {
     stream=acquired;
     const track=stream.getAudioTracks()[0];
     track.onended=()=>{if(token===epoch) stop('Microphone disconnected. Choose Listen to retry.');};
-    await audio.audioWorklet.addModule('./capture-worklet.js?rev=music1');if(token!==epoch) return;
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=trace1');if(token!==epoch) return;
     let syncs=0, failures=0, frames=0, metered=0, sum=0, peak=0;
     const settings={build:BUILD,mode:profile.name,profilePrefix:profile.prefix,symbolMilliseconds:1000*Math.round(audio.sampleRate*profile.seconds)/audio.sampleRate,audioSampleRate:audio.sampleRate,microphone:track.label||'Default input',capture:track.getSettings()};
     const toneWindow=new Float32Array(Math.round(audio.sampleRate*profile.seconds*.5));let toneFilled=0;
@@ -62,12 +76,13 @@ async function start(mode) {
       else if(event.type==='error') { failures++; $('checksum').textContent=`Latest frame rejected: ${event.message}. Prior received text is unchanged.`;status(`${event.message}. Listening for the next frame…`); }
       else { syncs++; status('Signal synchronized. Receiving frame…'); }
       showDetails();
-    },profile);
+    },profile,$('trace-panel').open);
     capture=new AudioWorkletNode(audio,'capture');
     capture.onprocessorerror=()=>{if(token===epoch) stop('Audio processor failed. Choose Listen to retry.');};
     capture.port.onmessage=event=>{if(token===epoch) {
       try {
         for(const sample of event.data) { sum+=sample*sample; peak=Math.max(peak,Math.abs(sample)); }
+        receiver.push(event.data);
         const chunk=event.data;
         if(chunk.length>=toneWindow.length) toneWindow.set(chunk.subarray(chunk.length-toneWindow.length));
         else { toneWindow.copyWithin(0,chunk.length);toneWindow.set(chunk,toneWindow.length-chunk.length); }
@@ -80,9 +95,9 @@ async function start(mode) {
           const toneLabel=tone<0?'no modem-frequency tone':`tone near ${profile.dictionary[tone].map(hz=>Number(hz.toFixed(1))).join(' + ')} Hz (not proof of a frame)`;
           $('input-meter').value=Math.max(-100,Math.min(0,db));
           $('input-level').textContent=`${level} · ${toneLabel}${peak>=.98?' · input near full scale: lower sender volume':''} · ${syncs} syncs · ${failures} rejected · ${frames} received`;
+          showTrace(tone);
           metered=0;sum=0;peak=0;
         }
-        receiver.push(event.data);
       } catch(error) {stop(`Receive error: ${error.message}`);}
     }};
     const input=audio.createMediaStreamSource(stream);input.connect(capture);capture.connect(audio.destination);

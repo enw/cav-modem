@@ -143,11 +143,30 @@ export function detectTone(samples,rate,begin=0,count=Math.round(rate*.02),profi
 }
 // Scan quarter-symbol steps; analyze the central half. Buffer growth is bounded by frame length.
 export class Receiver {
-  constructor(rate,onEvent,profile=PROFILE) {
+  constructor(rate,onEvent,profile=PROFILE,traceEnabled=false) {
+    this.traceEnabled=traceEnabled;
     checkSampleRate(rate,profile);this.profile=profile;this.rate=rate;this.onEvent=onEvent;
     this.n=Math.round(rate*profile.seconds);this.hop=Math.round(this.n/4);this.reset();
   }
-  reset() { this.buffer=new Float32Array(0);this.samples=this.buffer;this.scan=0;this.lock=null;this.length=null; }
+  resetTrace(state='Searching for sync') {
+    this.trace={state,symbols:[],bytes:[],symbolCount:0,pendingBits:0};this.traceValue=0;this.traceRead=0;this.traceLost=false;
+  }
+  setTracing(enabled) { this.traceEnabled=enabled;this.traceResult='No completed frame';this.resetTrace(this.lock===null?'Searching for sync':'Synchronized · provisional / unverified'); }
+  collectTrace(start) {
+    if(!this.traceEnabled||this.traceLost)return;
+    const limit=symbolCount((this.length??64)+this.profile.headerBytes+4,this.profile);
+    while(this.traceRead<limit&&start+(this.traceRead+1)*this.n<=this.samples.length) {
+      const symbol=this.tone(start+this.traceRead*this.n);
+      if(symbol<0) {this.traceLost=true;this.trace.state='Signal lost; awaiting frame rejection';break;}
+      this.traceRead++;this.trace.symbolCount++;
+      this.trace.symbols.push(symbol);if(this.trace.symbols.length>32)this.trace.symbols.shift();
+      for(let shift=this.profile.bits-1;shift>=0;shift--) {
+        this.traceValue=(this.traceValue<<1)|((symbol>>shift)&1);
+        if(++this.trace.pendingBits===8) {this.trace.bytes.push(this.traceValue);this.traceValue=0;this.trace.pendingBits=0;}
+      }
+    }
+  }
+  reset() { this.traceResult='No completed frame';this.resetTrace();this.buffer=new Float32Array(0);this.samples=this.buffer;this.scan=0;this.lock=null;this.length=null; }
   append(chunk) {
     const used=this.samples.length,total=used+chunk.length;
     if(total>this.buffer.length) {
@@ -187,19 +206,23 @@ export class Receiver {
         if(!found) {
           this.consume(this.scan); this.scan=0; return;
         }
-        this.lock=this.scan; this.onEvent({type:'receiving'});
+        this.lock=this.scan; this.resetTrace('Synchronized · provisional / unverified');this.onEvent({type:'receiving'});
       }
       const start=this.lock+pre;
-      if(start+symbolCount(this.profile.headerBytes,this.profile)*this.n>this.samples.length) return;
+      if(start+symbolCount(this.profile.headerBytes,this.profile)*this.n>this.samples.length) {this.collectTrace(start);return;}
       try {
         if(this.length===null) this.length=payloadLength(this.readBytes(start,this.profile.headerBytes,false),this.profile);
+        this.collectTrace(start);
         const byteCount=this.length+this.profile.headerBytes+4;
         const end=start+symbolCount(byteCount,this.profile)*this.n;
         if(end>this.samples.length) return;
         const text=decode(this.readBytes(start,byteCount),this.profile);
+        if(this.traceEnabled) {this.trace.bytes=this.trace.bytes.slice(0,byteCount);this.trace.pendingBits=0;this.trace.state='CRC-32 passed · verified frame';this.traceResult=this.trace.state;}
         this.onEvent({type:'message',text});
         this.consume(end); this.scan=0; this.lock=null;this.length=null;
       } catch(error) {
+        this.collectTrace(start);
+        if(this.traceEnabled) {this.trace.state=`Rejected: ${error.message} · unverified bytes discarded on next sync`;this.traceResult=this.trace.state;}
         this.onEvent({type:'error',message:error.message});
         this.scan=this.lock+this.hop; this.lock=null;this.length=null;
       }

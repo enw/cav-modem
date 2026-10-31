@@ -5,3 +5,5 @@
 select{font:inherit;color:inherit;background:#fffefa;border:1px solid #a7b6a9;border-radius:8px;padding:10px;max-width:100%}
 
 .music-controls{display:flex;flex-wrap:wrap;gap:12px}.music-controls[hidden]{display:none}.music-controls label{font-size:.8rem;margin-top:14px}.music-controls select{font-size:.85rem;padding:8px}
+
+#trace{font-family:monospace;font-size:.75rem;max-height:20rem;overflow:auto}

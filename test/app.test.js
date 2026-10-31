@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {encode,synthesize,DUAL_PROFILE,musicalProfile} from '../modem.js';
-const elements=new Map(['message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
+const elements=new Map(['trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
 class Context {
@@ -69,4 +69,17 @@ test('musical controls report computed timing, lock together and receive with th
   assert.equal(el('received').textContent,'music');assert.match(el('checksum').textContent,/32-tone A4 natural minor/);
   stop();for(const id of ['mode','tone-count','tonic','scale','order'])assert.equal(el(id).disabled,false);
   el('mode').value='fsk';el('mode').onchange();assert.equal(el('music-controls').hidden,true);
+});
+
+test('optional trace is throttled, safe text and cleared on Stop',async()=>{
+  window.isSecureContext=true;el('mode').value='fsk';el('mode').onchange();
+  el('trace-panel').open=true;el('trace-panel').ontoggle();
+  getMedia=async()=>makeStream();el('listen').onclick();await flush();
+  const frame=synthesize(encode('<b>hi</b>'),48000);
+  for(let i=0;i<frame.length;i+=2048)worklet.port.onmessage({data:frame.subarray(i,i+2048)});
+  for(let i=0;i<6;i++)worklet.port.onmessage({data:new Float32Array(2048)});
+  assert.match(el('trace').textContent,/CRC-32 passed/);assert.match(el('trace').textContent,/3c 62 3e/);
+  assert.match(el('trace').textContent,/<b>hi<\/b>/);assert.equal(el('received').textContent,'<b>hi</b>');
+  stop();assert.match(el('trace').textContent,/cleared/);
+  el('trace-panel').open=false;el('trace-panel').ontoggle();assert.equal(el('trace').textContent,'Trace off.');
 });
