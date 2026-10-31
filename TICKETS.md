@@ -17,3 +17,7 @@ Physical progress: the user reported that a short `hello world` message crossed 
 - [ ] 09 Evaluate musical dictionaries on real devices and with listeners. Start at 4/8; compare key, scale and shuffle; treat 32/64 as experimental. Record results against the FSK baseline.
 
 Musical implementation evidence: 29 Node tests and 22 Chrome synthetic AudioWorklet profiles pass. Musical configuration/individual-tone checks cover all 240 combinations. No physical microphone or listening test performed by the agent. Build `music1`; publication pending.
+
+- [ ] 10 Investigate user-reported classic FSK failure after `music1` deployment. Root cause not reproduced; verify both endpoints use Classic FSK (not musical four-note FSK), inspect input/tones/sync status, and record devices and capture settings. No speculative runtime change made.
+
+Regression evidence (31 October 2026): compared `8bea97e` (`rx2`) with `32f4bc7` (`music1`): 80 randomized channel cases at 44.1/48 kHz decoded on both; encoded bytes, symbols and synthesized samples were identical. Published HTML/modules/worklet matched `music1` when fetched. Added a frozen rx2 `hello world` fixture with 80 randomized gain/noise/onset/chunk-size cases; all 31 Node tests pass. Chrome silent real-time AudioWorklet check passes at 44.1 kHz with quiet gain, noise and 137 ms onset. These checks do not reproduce a microphone/speaker path or exclude stale user tabs, profile mismatch, or acoustic conditions. Physical failure remains unresolved.

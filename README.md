@@ -22,9 +22,9 @@ The initial implementation uses native JavaScript modules rather than the propos
 npm test
 ```
 
-Open http://localhost:8080/browser-check.html and choose **Run browser audio check** for generated audio through a real browser OfflineAudioContext and AudioWorklet. This test neither captures the microphone nor plays sound.
+Open http://localhost:8080/browser-check.html and choose **Run browser audio check** for generated audio through a real browser OfflineAudioContext and AudioWorklet. Choose **Run silent real-time classic check** to feed a frozen rx2 waveform through the current real-time AudioWorklet and receiver. Neither check captures the microphone or plays sound.
 
-The current local experiment has 29 passing Node tests, including all 240 musical dictionary configurations and individual-tone classifications, variable-width padding, exact UTF-8 boundaries, wrong profiles, malformed frames, channel simulations, and mocked UI lifecycle/error handling. Chrome's offline AudioWorklet check passes 22 profiles: classic, dual-tone, and all musical count/scale/order combinations at C4. No microphone is activated by these checks. Physical success has only been user-reported for a short baseline FSK message; repeated acceptance for the new profiles remains open.
+The current local experiment has 31 passing Node tests, including all 240 musical dictionary configurations and individual-tone classifications, variable-width padding, exact UTF-8 boundaries, wrong profiles, malformed frames, channel simulations, and mocked UI lifecycle/error handling. Chrome's offline AudioWorklet check passes 22 profiles: classic, dual-tone, and all musical count/scale/order combinations at C4. No microphone is activated by these checks. Physical success has only been user-reported for a short baseline FSK message; repeated acceptance for the new profiles remains open.
 
 ## Try two devices
 

@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><title>Modem browser check</title><body><h1>Offline audio check</h1><p>This test uses generated samples only. No microphone, speaker playback, or network message transport.</p><button id="run">Run browser audio check</button><pre id="result">Not run</pre><script type="module">
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Modem browser check</title><body><h1>Browser audio checks</h1><p>This test uses generated samples only. No microphone, speaker playback, or network message transport.</p><button id="run">Run browser audio check</button><pre id="result">Not run</pre><button id="realtime">Run silent real-time classic check</button><button id="cancel" disabled>Stop real-time check</button><pre id="live-result">Not run</pre><script type="module">
 import {encode,synthesize,Receiver,PROFILES,musicalProfile} from './modem.js?rev=music1';
 document.querySelector('#run').onclick=async()=>{
   const result=document.querySelector('#result');result.textContent='Running…';
@@ -23,5 +23,31 @@ document.querySelector('#run').onclick=async()=>{
     }
     result.textContent=`PASS: ${passed.length} profiles: classic FSK, dual-tone, and every musical count/scale/order combination (C4). Quiet Web Audio buffers (gain 0.005) → AudioWorklet batches → exact UTF-8 + CRC. No physical path tested.`;
   }catch(error){result.textContent='FAIL: '+error.message;}
+};
+let liveAudio;
+document.querySelector('#cancel').onclick=()=>{liveAudio?.close();document.querySelector('#live-result').textContent='Stopped.';};
+document.querySelector('#realtime').onclick=async()=>{
+  const result=document.querySelector('#live-result'),button=document.querySelector('#realtime'),cancel=document.querySelector('#cancel');
+  button.disabled=true;cancel.disabled=false;result.textContent='Running in real time; generated input only, silent output…';
+  let audio;
+  try {
+    audio=new AudioContext();liveAudio=audio;await audio.resume();
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=music1');
+    const rate=audio.sampleRate,bytes=Uint8Array.from('01000b68656c6c6f20776f726c645beb9cd6'.match(/../g),hex=>parseInt(hex,16));
+    const sequence=[0,3,0,3,0,3,0,3,1,2,3,0,2,1,0,3,2,2,0,1,3,1,2,0,...Array.from(bytes).flatMap(b=>[b>>>6,(b>>>4)&3,(b>>>2)&3,b&3])];
+    const n=Math.round(rate*.04),ramp=Math.round(rate*.002),lead=Math.round(rate*.137),samples=new Float32Array(lead+sequence.length*n+rate);
+    for(let s=0;s<sequence.length;s++)for(let i=0;i<n;i++)samples[lead+s*n+i]=.005*.45*Math.min(1,i/ramp,(n-1-i)/ramp)*Math.sin(2*Math.PI*[1200,1600,2000,2400][sequence[s]]*i/rate);
+    let seed=7;for(let i=0;i<samples.length;i++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;samples[i]+=(seed/2**32-.5)*.0001;}
+    const events=[],rx=new Receiver(rate,e=>events.push(e)),capture=new AudioWorkletNode(audio,'capture');
+    capture.port.onmessage=e=>rx.push(e.data);
+    const source=audio.createBufferSource();source.buffer=audio.createBuffer(1,samples.length,rate);source.buffer.copyToChannel(samples,0);
+    source.connect(capture);capture.connect(audio.destination);source.start();
+    const deadline=performance.now()+10000;
+    while(audio.state!=='closed'&&!events.some(e=>e.type==='message')&&performance.now()<deadline)await new Promise(r=>setTimeout(r,50));
+    if(audio.state==='closed')return;
+    if(events.filter(e=>e.type==='message').length!==1||events.find(e=>e.type==='message').text!=='hello world')throw new Error(JSON.stringify(events));
+    result.textContent=`PASS: rx2 classic hello world waveform → real-time AudioWorklet → music1 receiver, ${rate} Hz, quiet gain + noise + 137 ms onset. No microphone or physical path tested.`;
+  } catch(error) {result.textContent='FAIL: '+error.message;}
+  finally {if(audio&&audio.state!=='closed')await audio.close();liveAudio=null;button.disabled=false;cancel.disabled=true;}
 };
 </script></body></html>
