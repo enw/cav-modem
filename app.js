@@ -1,5 +1,6 @@
-import {encode,synthesize,Receiver} from './modem.js';
+import {encode,synthesize,Receiver,detectTone,PROFILE} from './modem.js?rev=rx2';
 const $=id=>document.getElementById(id);
+const BUILD='rx2';
 let context,stream,source,capture,receiver,epoch=0,active=false;
 function status(text) { $('status').textContent=text; }
 function update() {
@@ -13,6 +14,8 @@ export function stop(message='Stopped. Incomplete frame discarded.') {
   if(capture) { capture.port.onmessage=null; capture.disconnect(); capture=null; }
   stream?.getTracks().forEach(track=>track.stop());stream=null;receiver?.reset();receiver=null;
   const old=context;context=null;old?.close().catch(()=>{});
+  $('input-level').textContent='Microphone inactive.';
+  $('input-meter').value=-100;
   status(message);update();
 }
 async function start(mode) {
@@ -34,24 +37,48 @@ async function start(mode) {
     }
     if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone needs HTTPS or localhost. Ordinary LAN HTTP will not work.');
     status('Waiting for microphone permission…');
-    const acquired=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+    const acquired=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1},video:false});
     if(token!==epoch) { acquired.getTracks().forEach(track=>track.stop());return; }
     stream=acquired;
     const track=stream.getAudioTracks()[0];
     track.onended=()=>{if(token===epoch) stop('Microphone disconnected. Choose Listen to retry.');};
-    await audio.audioWorklet.addModule('./capture-worklet.js');if(token!==epoch) return;
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=rx2');if(token!==epoch) return;
+    let syncs=0, failures=0, frames=0, metered=0, sum=0, peak=0;
+    const settings={build:BUILD,audioSampleRate:audio.sampleRate,microphone:track.label||'Default input',capture:track.getSettings()};
+    const showDetails=()=>{ $('diagnostics').textContent=JSON.stringify({...settings,syncs,failures,frames},null,2); };
     receiver=new Receiver(audio.sampleRate,event=>{
-      if(event.type==='message') { $('received').textContent=event.text; $('checksum').textContent='CRC-32 passed · exact UTF-8 frame';status('Valid message received. Still listening…'); }
-      else if(event.type==='error') { $('checksum').textContent=`Latest frame rejected: ${event.message}. Prior received text is unchanged.`;status(`${event.message}. Listening for the next frame…`); }
-      else status('Receiving frame…');
+      if(event.type==='message') { frames++; $('received').textContent=event.text; $('checksum').textContent='CRC-32 passed · exact UTF-8 frame';status('Valid message received. Still listening…'); }
+      else if(event.type==='error') { failures++; $('checksum').textContent=`Latest frame rejected: ${event.message}. Prior received text is unchanged.`;status(`${event.message}. Listening for the next frame…`); }
+      else { syncs++; status('Signal synchronized. Receiving frame…'); }
+      showDetails();
     });
     capture=new AudioWorkletNode(audio,'capture');
     capture.onprocessorerror=()=>{if(token===epoch) stop('Audio processor failed. Choose Listen to retry.');};
-    capture.port.onmessage=event=>{if(token===epoch) {try {receiver.push(event.data);} catch(error) {stop(`Receive error: ${error.message}`);} }};
+    capture.port.onmessage=event=>{if(token===epoch) {
+      try {
+        for(const sample of event.data) { sum+=sample*sample; peak=Math.max(peak,Math.abs(sample)); }
+        metered+=event.data.length;
+        if(metered>=audio.sampleRate*.25) {
+          const rms=Math.sqrt(sum/metered), db=20*Math.log10(Math.max(rms,1e-10));
+          const tone=detectTone(event.data,audio.sampleRate);
+          const level=rms<1e-5?'No input audio':`Input audio: ${db.toFixed(0)} dBFS`;
+          const toneLabel=tone<0?'no modem-frequency tone':`tone near ${PROFILE.tones[tone]} Hz (not proof of a frame)`;
+          $('input-meter').value=Math.max(-100,Math.min(0,db));
+          $('input-level').textContent=`${level} · ${toneLabel}${peak>=.98?' · input near full scale: lower sender volume':''} · ${syncs} syncs · ${failures} rejected · ${frames} received`;
+          metered=0;sum=0;peak=0;
+        }
+        receiver.push(event.data);
+      } catch(error) {stop(`Receive error: ${error.message}`);}
+    }};
     const input=audio.createMediaStreamSource(stream);input.connect(capture);capture.connect(audio.destination);
-    $('diagnostics').textContent=JSON.stringify({audioSampleRate:audio.sampleRate,capture:track.getSettings()},null,2);
+    showDetails();
+    $('input-level').textContent='Waiting for microphone samples…';
+    track.onmute=()=>{if(token===epoch) status('Microphone input muted or interrupted. Check the selected input.');};
+    track.onunmute=()=>{if(token===epoch) status('Microphone input resumed. Listening…');};
     status('Listening. Send from the other device.');
   } catch(error) { if(token===epoch) stop(`Unable to ${mode}: ${error.message} (${error.name}). Retry when ready.`); }
 }
 $('send').onclick=()=>start('send');$('listen').onclick=()=>start('listen');$('stop').onclick=()=>stop();$('message').oninput=update;
-window.addEventListener('pagehide',()=>stop());update();
+window.addEventListener('pagehide',()=>stop());
+$('diagnostics').textContent=`Receiver build ${BUILD}. Microphone starts only when you choose Listen.`;
+update();

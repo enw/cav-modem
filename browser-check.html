@@ -1,11 +1,11 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Modem browser check</title><body><h1>Offline audio check</h1><p>This test uses generated samples only. No microphone, speaker playback, or network message transport.</p><button id="run">Run browser audio check</button><pre id="result">Not run</pre><script type="module">
-import {encode,synthesize,Receiver} from './modem.js';
+import {encode,synthesize,Receiver} from './modem.js?rev=rx2';
 document.querySelector('#run').onclick=async()=>{
   const result=document.querySelector('#result');result.textContent='Running…';
   try {
-    const rate=48000, text='Café — 🙂', samples=synthesize(encode(text),rate), events=[];
+    const rate=48000, text='Café — 🙂', samples=synthesize(encode(text),rate).map(value=>value*.005), events=[];
     const audio=new OfflineAudioContext(1,samples.length+rate,rate);
-    await audio.audioWorklet.addModule('./capture-worklet.js');
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=rx2');
     const receiver=new Receiver(rate,event=>events.push(event));
     const capture=new AudioWorkletNode(audio,'capture');capture.port.onmessage=e=>receiver.push(e.data);
     const source=audio.createBufferSource();source.buffer=audio.createBuffer(1,samples.length,rate);source.buffer.copyToChannel(samples,0);
@@ -14,7 +14,7 @@ document.querySelector('#run').onclick=async()=>{
     const deadline=performance.now()+3000;
     while(!events.some(e=>e.type==='message')&&performance.now()<deadline) await new Promise(r=>setTimeout(r,20));
     if(events.filter(e=>e.type==='message').length!==1||events.find(e=>e.type==='message').text!==text) throw new Error(JSON.stringify(events));
-    result.textContent='PASS: Web Audio buffer → AudioWorklet batches → receiver → exact UTF-8 + CRC. No physical path tested.';
+    result.textContent='PASS: Quiet Web Audio buffer (gain 0.005) → AudioWorklet batches → receiver → exact UTF-8 + CRC. No physical path tested.';
   }catch(error){result.textContent='FAIL: '+error.message;}
 };
 </script></body></html>

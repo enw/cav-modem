@@ -4,6 +4,8 @@
 <label for="message">Your message</label><textarea id="message" rows="3" placeholder="Hello across the room">Hello across the room</textarea><p id="count" class="meta"></p>
 <div class="controls"><button id="send">Send</button><button id="listen" class="secondary">Listen</button><button id="stop" class="secondary" disabled>Stop</button></div>
 <p id="status" role="status" aria-live="polite">Ready. Choose Send or Listen.</p>
+<meter id="input-meter" min="-100" max="0" value="-100" aria-label="Microphone input level in dBFS"></meter>
+<p id="input-level" class="meta">Microphone inactive.</p>
 <section><h2>Received text</h2><pre id="received">No message received yet.</pre><p id="checksum" class="meta">Waiting for a complete, valid frame.</p></section>
 <details><summary>Signal and frame details</summary><p>Four tones · 1200 / 1600 / 2000 / 2400 Hz · 40 ms symbols · 50 raw bits/s · 64-byte limit · CRC-32</p><pre id="diagnostics">Microphone starts only when you choose Listen.</pre></details>
-<p class="meta">Keep both tabs awake and in the foreground. Playback complete is not confirmation of delivery. Swap roles for a reply.</p></main><script type="module" src="app.js"></script></body></html>
+<p class="meta">Keep both tabs awake and in the foreground. Playback complete is not confirmation of delivery. Swap roles for a reply.</p></main><script type="module" src="app.js?rev=rx2"></script></body></html>

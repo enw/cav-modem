@@ -39,24 +39,28 @@ export function synthesize(bytes,rate) {
   }
   return samples;
 }
+export function detectTone(samples,rate,begin=0,count=Math.round(rate*.02)) {
+  if(begin<0||begin+count>samples.length) return -1;
+  let energy=0; const power=[];
+  for(let i=0;i<count;i++) energy+=samples[begin+i]**2;
+  // Reject digital silence, not quiet microphones. Tone purity below is gain-relative.
+  if (energy/count < 1e-10) return -1;
+  for(const frequency of PROFILE.tones) {
+    const coefficient=2*Math.cos(2*Math.PI*frequency/rate);
+    let a=0,b=0;
+    for(let i=0;i<count;i++) { const next=samples[begin+i]+coefficient*a-b; b=a; a=next; }
+    power.push(a*a+b*b-coefficient*a*b);
+  }
+  const best=Math.max(...power), index=power.indexOf(best);
+  const second=Math.max(...power.filter((_,i)=>i!==index));
+  return best > second*3 && best > energy*count*.20 ? index : -1;
+}
 // Sample-clock receiver: scan every 10 ms; inspect the central 20 ms of each symbol.
 export class Receiver {
   constructor(rate,onEvent) { this.rate=rate; this.onEvent=onEvent; this.n=Math.round(rate*.04); this.hop=Math.round(rate*.01); this.reset(); }
   reset() { this.samples=new Float32Array(0); this.scan=0; this.lock=null; }
   tone(start) {
-    const begin=start+Math.round(this.n*.25), count=Math.round(this.n*.5);
-    let energy=0; const power=[];
-    for(let i=0;i<count;i++) energy+=this.samples[begin+i]**2;
-    if (energy/count < 0.00001) return -1;
-    for(const frequency of PROFILE.tones) {
-      const coefficient=2*Math.cos(2*Math.PI*frequency/this.rate);
-      let a=0,b=0;
-      for(let i=0;i<count;i++) { const next=this.samples[begin+i]+coefficient*a-b; b=a; a=next; }
-      power.push(a*a+b*b-coefficient*a*b);
-    }
-    const best=Math.max(...power), index=power.indexOf(best);
-    const second=Math.max(...power.filter((_,i)=>i!==index));
-    return best > second*3 && best > energy*count*.20 ? index : -1;
+    return detectTone(this.samples,this.rate,start+Math.round(this.n*.25),Math.round(this.n*.5));
   }
   readBytes(start,count) {
     const bytes=new Uint8Array(count);
