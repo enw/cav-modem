@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {encode,synthesize} from '../modem.js';
-const elements=new Map(['message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter'].map(id=>[id,{value:id==='message'?'Hello':'',textContent:'',disabled:false}]));
+import {encode,synthesize,DUAL_PROFILE} from '../modem.js';
+const elements=new Map(['message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':'',textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
 class Context {
@@ -41,4 +41,18 @@ test('UI lifecycle, failure recovery, pending permission cancellation and discon
   tracks.at(-1).onended();assert.match(el('status').textContent,/disconnected/);assert.equal(tracks.at(-1).stopped,true);assert.equal(el('input-meter').value,-100);
   el('listen').onclick();await flush();stop();assert.equal(tracks.at(-1).stopped,true);
   window.isSecureContext=false;el('listen').onclick();await flush();assert.match(el('status').textContent,/HTTPS/);
+});
+
+
+test('mode selection configures both roles and is locked during activity',async()=>{
+  window.isSecureContext=true;
+  el('mode').value='dual';el('mode').onchange();
+  assert.match(el('profile-details').textContent,/900\+1900/);assert.equal(el('mode').disabled,false);
+  el('send').onclick();await flush();assert.equal(el('mode').disabled,true);assert.match(el('diagnostics').textContent,/Dual-tone/);stop();
+  getMedia=async()=>makeStream();el('listen').onclick();await flush();assert.equal(el('mode').disabled,true);
+  const frame=synthesize(encode('pair hello',DUAL_PROFILE),48000,DUAL_PROFILE);
+  for(let i=0;i<frame.length;i+=2048)worklet.port.onmessage({data:frame.subarray(i,i+2048)});
+  for(let i=0;i<6;i++)worklet.port.onmessage({data:new Float32Array(2048)});
+  assert.equal(el('received').textContent,'pair hello');assert.match(el('checksum').textContent,/Dual-tone pairs/);
+  stop();assert.equal(el('mode').disabled,false);el('mode').value='fsk';el('mode').onchange();
 });

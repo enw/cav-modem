@@ -10,3 +10,7 @@ Software tickets are complete. Physical two-device acceptance remains open; simu
 - [x] 05 Diagnose quiet reception and add live input diagnostics. Build `rx2` accepts quiet clear signals formerly rejected by the absolute volume gate; 11 automated tests and synthetic browser checks cover the change. Live level meter separates input activity, modem-frequency tones, synchronization, and frame validation. Physical user failure remains unconfirmed pending retest.
 
 Physical progress: the user reported that a short `hello world` message crossed the acoustic path successfully after increasing sender playback volume on 31 October 2026, using the existing deployed baseline before `rx2` was published. Device/browser details, conditions, and repeated reliability measurements were not recorded. This single reported success does not close ticket 04.
+
+- [x] 06 Add selectable dual-tone pairs with a fixed dictionary, distinct preamble/profile byte, shared frame/CRC, cross-mode rejection and regression tests. Four-tone FSK remains the default. Evidence: 18 passing Node tests and Chrome offline AudioWorklet loopback for both modes. Local implementation only; no publication authorized for this experiment.
+- [ ] 07 Compare dual-tone and FSK on physical device pairs using identical messages and recorded conditions. Include wrong-mode and muted-path checks; do not infer success from synthetic loopback.
+- [ ] 08 Explore a musically beautiful tone dictionary as the next design experiment. See ROADMAP.md; no musical profile implemented yet.
