@@ -1,9 +1,9 @@
-import {DrumProbe,DRUM_NAMES} from './drums.js?rev=drumdebug1';
+import {DrumProbe} from './drums.js?rev=percussion1';
 import {cwProfile,normalizeCW,cwDuration,synthesizeCW,detectCW,CWReceiver} from './cw.js?rev=cw1';
-import {encode,synthesize,Receiver,detectTone,PROFILES,drumProfile,musicalProfile,frameDuration} from './modem.js?rev=drum2';
+import {encode,synthesize,Receiver,detectTone,PROFILES,drumProfile,musicalProfile,frameDuration} from './modem.js?rev=percussion1';
 const $=id=>document.getElementById(id);
-const BUILD='drumdebug1';
-const profileControls=['mode','cw-speed','drum-speed','tone-count','tonic','scale','order'];
+const BUILD='percussion1';
+const profileControls=['mode','cw-speed','drum-palette','drum-speed','tone-count','tonic','scale','order'];
 export const SETTINGS_KEY='cav-modem.settings.v1';
 const supported=(control,value)=>typeof value==='string'&&Array.from(control.options).some(option=>!option.disabled&&option.value===value);
 export function restoreSettings(controls,getStorage=()=>window.localStorage) {
@@ -20,7 +20,7 @@ export function saveSettings(controls,getStorage=()=>window.localStorage) {
   } catch {} // Quota/security failures must not interrupt normal modem use.
 }
 restoreSettings(profileControls.map($));
-const selectedProfile=()=>$('mode').value==='cw'?cwProfile(Number($('cw-speed').value)):$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):$('mode').value==='drums'?drumProfile(Number($('drum-speed').value)):PROFILES[$('mode').value];
+const selectedProfile=()=>$('mode').value==='cw'?cwProfile(Number($('cw-speed').value)):$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):$('mode').value==='drums'?drumProfile(Number($('drum-speed').value),$('drum-palette').value):PROFILES[$('mode').value];
 const radioMessages=['CQ CQ DE TEST','RST 599 TNX FER QSO','QTH BROOKLYN NY','TNX FER CONTACT 73','QRL? CQ CQ','SOLID COPY TNX 73'];
 let radioIndex=0;
 $('radio-message').onclick=()=>{
@@ -51,6 +51,7 @@ function update() {
   for(const id of profileControls) $(id).disabled=active;
   $('drum-debug-panel').hidden=$('mode').value!=='drums';
   $('cw-controls').hidden=$('mode').value!=='cw';
+  if($('mode').value==='drums')$('drum-bands').textContent=`Bands in symbol order: ${selectedProfile().names.map((name,i)=>`${name} ${selectedProfile().dictionary[i][0]} Hz`).join(' / ')}. Unsynchronized probes, not decoded symbols.`;
   $('drum-controls').hidden=$('mode').value!=='drums';
   $('music-controls').hidden=$('mode').value!=='musical';
   const profile=selectedProfile();
@@ -128,7 +129,7 @@ async function start(mode) {
         for(const sample of event.data) { sum+=sample*sample; peak=Math.max(peak,Math.abs(sample)); }
         receiver.push(event.data);
         if(profile.id==='drums'&&$('drum-debug-panel').open) {
-          drumProbe??=new DrumProbe(audio.sampleRate,row=>console.debug('CAV drum probe (unverified)',{...row,mode:profile.name,slotMilliseconds:profile.seconds*1000}));
+          drumProbe??=new DrumProbe(audio.sampleRate,row=>console.debug('CAV drum probe (unverified)',{...row,mode:profile.name,slotMilliseconds:profile.seconds*1000}),profile.palette);
           drumProbe.push(event.data);
         }
 
@@ -145,7 +146,7 @@ async function start(mode) {
           $('input-meter').value=Math.max(-100,Math.min(0,db));
           $('input-level').textContent=`${level} · ${toneLabel}${peak>=.98?' · input near full scale: lower sender volume':''} · ${syncs} syncs · ${failures} rejected · ${frames} received`;
           showTrace(tone);
-          if(drumProbe&&$('drum-debug-panel').open)$('drum-debug').textContent=drumProbe.rows.map(r=>`${r.seconds.toFixed(2)}s window: ${r.id<0?'rejected':DRUM_NAMES[r.id]} · ${r.reason} · ratio ${r.ratio.toFixed(2)} · decay ${r.decay.toFixed(2)} · share ${r.share.toFixed(2)} · bands ${r.bandMeanSquares.map(x=>x.toExponential(2)).join('/')}`).join('\n');
+          if(drumProbe&&$('drum-debug-panel').open)$('drum-debug').textContent=drumProbe.rows.map(r=>`${r.seconds.toFixed(2)}s window: ${r.id<0?'rejected':profile.names[r.id]} · ${r.reason} · ratio ${r.ratio.toFixed(2)} · decay ${r.decay.toFixed(2)} · share ${r.share.toFixed(2)} · bands ${r.bandMeanSquares.map(x=>x.toExponential(2)).join('/')}`).join('\n');
           metered=0;sum=0;peak=0;
         }
       } catch(error) {stop(`Receive error: ${error.message}`);}

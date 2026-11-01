@@ -50,3 +50,7 @@ Local `drum2` adds experimental 200 ms slots (160 ms hits, 40 ms guards) beside 
 ## Active experiment — plain CW
 
 `cw1` adds genuine keyed 700 Hz International Morse at 8/12/16 WPM, with explicit normalization, a small supported character set, silence finalization and unverified text diagnostics. All framed FSK/drum modes remain separate and unchanged. Next gate: two-device short-message trials with matching WPM, noting spacing errors and missed marks; no physical CW success claimed. Arbitrary hand-keyed speed detection and Farnsworth timing are deferred.
+
+### Midrange palette comparison
+
+Local `percussion1` adds dictionary 02 at 1100/1550/2100/2800 Hz, with woodblock/rim-click/high-tom/short-snare-like hits, 250/200 ms slots and narrower classifier filters. Original dictionary 01 is retained byte-for-byte for comparison. Hypothesis: moving discriminating energy into this range may help the phone path that already passed four-tone FSK, but the observed original-drum pre-sync failure has not been attributed to any particular sample or hardware limitation. Next: compare CRC-passing short messages and pre-sync debug measurements across palettes under matched volume/distance/speed; do not optimize further without those measurements.

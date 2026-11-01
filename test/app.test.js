@@ -2,7 +2,7 @@ import {cwProfile,synthesizeCW} from '../cw.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {encode,synthesize,DUAL_PROFILE,DRUM_PROFILE,FAST_DRUM_PROFILE,musicalProfile} from '../modem.js';
-const elements=new Map(['drum-debug-panel','drum-debug','cw-speed','cw-controls','cw-normalized','received-title','drum-speed','drum-controls','radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'cw-speed':'12','drum-speed':'250','tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
+const elements=new Map(['drum-palette','drum-bands','drum-debug-panel','drum-debug','cw-speed','cw-controls','cw-normalized','received-title','drum-speed','drum-controls','radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'drum-palette':'original','cw-speed':'12','drum-speed':'250','tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
 class Context {
@@ -135,9 +135,9 @@ test('drum speed updates rate/duration, locks while active and receives the sele
 
 test('settings validate every select, retain defaults and ignore unrelated stored fields',()=>{
   const controls=Array.from(elements.values()).filter(e=>e.options);
-  assert.equal(controls.length,7);
+  assert.equal(controls.length,8);
   const initial=controls.map(c=>c.value);
-  const saved={'cw-speed':'16','mode':'musical','drum-speed':'200','tone-count':'32','tonic':'9','scale':'minor','order':'shuffled',message:'must not save',active:true};
+  const saved={'drum-palette':'original','cw-speed':'16','mode':'musical','drum-speed':'200','tone-count':'32','tonic':'9','scale':'minor','order':'shuffled',message:'must not save',active:true};
   restoreSettings(controls,()=>({getItem:()=>JSON.stringify(saved)}));
   for(const c of controls)assert.equal(c.value,saved[c.id]);
   let output;saveSettings(controls,()=>({setItem:(key,value)=>{assert.equal(key,SETTINGS_KEY);output=JSON.parse(value);}}));
@@ -197,4 +197,21 @@ test('drum debug is opt-in, bounded, independent of decoding and cleared by Stop
     const count=logs.length;worklet.port.onmessage({data:new Float32Array(2048)});assert.equal(logs.length,count);
     stop();assert.equal(elements.get('drum-debug-panel').open,false);assert.match(elements.get('drum-debug').textContent,/cleared/);
   } finally {console.debug=original;stop();}
+});
+
+test('midrange palette configures receive and diagnostics, persists and locks while busy',async()=>{
+  stop();const el=id=>elements.get(id);
+  el('mode').value='drums';el('drum-palette').value='midrange';el('drum-speed').value='250';el('mode').onchange();
+  assert.match(el('profile-details').textContent,/Midrange/);assert.match(el('drum-bands').textContent,/woodblock 1100.*short snare 2800/);
+  const saved=[];saveSettings([el('drum-palette')],()=>({setItem:(_,v)=>saved.push(v)}));el('drum-palette').value='original';restoreSettings([el('drum-palette')],()=>({getItem:()=>saved[0]}));assert.equal(el('drum-palette').value,'midrange');
+  getMedia=async()=>({getTracks:()=>[],getAudioTracks:()=>[{getSettings:()=>({})}]});
+  await el('listen').onclick();assert.equal(el('drum-palette').disabled,true);
+  const originalDebug=console.debug;console.debug=()=>{};
+  try {
+    el('drum-debug-panel').open=true;el('drum-debug-panel').ontoggle();
+    const {MID_DRUM_PROFILE:p}=await import('../modem.js');const samples=synthesize(encode('TNX FER CONTACTS 73',p),48000,p);
+    for(let i=0;i<samples.length;i+=2048)worklet.port.onmessage({data:samples.subarray(i,i+2048)});
+    assert.equal(el('received').textContent,'TNX FER CONTACTS 73');assert.match(el('drum-debug').textContent,/woodblock|rim-click|high tom|short snare/);
+  } finally {console.debug=originalDebug;stop();}
+  assert.equal(el('drum-palette').disabled,false);el('drum-palette').value='original';el('drum-palette').onchange();
 });

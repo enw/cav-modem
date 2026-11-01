@@ -1,12 +1,12 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Modem browser check</title><body><h1>Browser audio checks</h1><p>This test uses generated samples only. No microphone, speaker playback, or network message transport.</p><button id="run">Run browser audio check</button><pre id="result">Not run</pre><button id="realtime">Run silent real-time classic check</button><button id="cancel" disabled>Stop real-time check</button><pre id="live-result">Not run</pre><script type="module">
-import {encode,synthesize,Receiver,PROFILES,FAST_DRUM_PROFILE,musicalProfile} from './modem.js?rev=drum2';
-import {DrumProbe} from './drums.js?rev=drumdebug1';
+import {encode,synthesize,Receiver,PROFILES,FAST_DRUM_PROFILE,MID_DRUM_PROFILE,FAST_MID_DRUM_PROFILE,musicalProfile} from './modem.js?rev=percussion1';
+import {DrumProbe} from './drums.js?rev=percussion1';
 import {cwProfile,synthesizeCW,CWReceiver} from './cw.js?rev=cw1';
 document.querySelector('#run').onclick=async()=>{
   const result=document.querySelector('#result');result.textContent='Running…';
   try {
     const passed=[];
-    const profiles=[...Object.values(PROFILES),FAST_DRUM_PROFILE];
+    const profiles=[...Object.values(PROFILES),FAST_DRUM_PROFILE,MID_DRUM_PROFILE,FAST_MID_DRUM_PROFILE];
     for(const count of [4,8,16,32,64])for(const scale of ['major','minor'])for(const order of ['ascending','shuffled'])profiles.push(musicalProfile({count,scale,order}));
     for(const profile of profiles) {
     result.textContent=`Checking ${profile.name} (${passed.length+1}/${profiles.length})…`;
@@ -14,7 +14,7 @@ document.querySelector('#run').onclick=async()=>{
     const audio=new OfflineAudioContext(1,samples.length+rate,rate);
     await audio.audioWorklet.addModule('./capture-worklet.js?rev=drum2');
     const receiver=new Receiver(rate,event=>events.push(event),profile,true);
-    const probe=profile.id==='drums'?new DrumProbe(rate):null;
+    const probe=profile.id==='drums'?new DrumProbe(rate,()=>{},profile.palette):null;
     const capture=new AudioWorkletNode(audio,'capture');capture.port.onmessage=e=>{receiver.push(e.data);probe?.push(e.data);};
     const source=audio.createBufferSource();source.buffer=audio.createBuffer(1,samples.length,rate);source.buffer.copyToChannel(samples,0);
     source.connect(capture);capture.connect(audio.destination);source.start();await audio.startRendering();
@@ -40,7 +40,7 @@ document.querySelector('#run').onclick=async()=>{
       const messages=events.filter(e=>e.type==='message');
       if(messages.length!==1||messages[0].text!==text||messages[0].verified!==false)throw new Error('CW '+speed+': '+JSON.stringify(events));
     }
-    result.textContent=`PASS: ${passed.length} profiles: classic FSK, dual-tone, both drum speeds, and every musical count/scale/order combination (C4). Quiet Web Audio buffers (gain 0.005) → AudioWorklet batches → exact UTF-8 + CRC + bounded decode trace. Drum pre-sync observer enabled with bounded records. Plus plain CW at 8/12/16 WPM through the silent worklet, explicitly unverified. No physical path tested.`;
+    result.textContent=`PASS: ${passed.length} profiles: classic FSK, dual-tone, both drum palettes at both speeds, and every musical count/scale/order combination (C4). Quiet Web Audio buffers (gain 0.005) → AudioWorklet batches → exact UTF-8 + CRC + bounded decode trace. Drum pre-sync observer enabled with bounded records. Plus plain CW at 8/12/16 WPM through the silent worklet, explicitly unverified. No physical path tested.`;
   }catch(error){result.textContent='FAIL: '+error.message;}
 };
 let liveAudio;

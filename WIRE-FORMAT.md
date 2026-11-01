@@ -200,3 +200,27 @@ Receiver: 10 ms blocks compare normalized Goertzel energy at 700 Hz against 500/
 ### Optional drum observer (`drumdebug1`)
 
 Wire data, samples and classifier inequalities are unchanged. `inspectDrum` exposes the same classifier decision with band mean-square energies, top/runner-up ratio, early/late decay ratio, winning share and rejection reason. An independently enabled main-thread observer scans overlapping 140 ms windows every 20 ms, retaining the strongest-energy candidate for each 250 ms reporting interval. These unsynchronized probes do not feed symbols to the receiver and are not proof of preamble acquisition. Times are seconds from enabling the observer, not wall-clock timestamps. Display and console limits are 12 rows and 120 console records per enable respectively, with at most four reports per second. Stop disables and resets the observer. No raw recordings or persistent diagnostic storage.
+
+## Midrange percussion dictionary 02 (`percussion1`)
+
+An additional **Midrange percussion (phone experiment)** palette under Drum samples. Original dictionary 01 remains the default and its PCM samples, profiles and thresholds are unchanged. Both endpoints must match palette and slot speed. This concentrates discriminating energy in the midrange; it is a testable phone-speaker hypothesis, not a measured hardware fix.
+
+| Symbol / bits | Procedural sound | Center / detector band | Exponential decay |
+| --- | --- | --- | --- |
+| 0 / 00 | Woodblock-like pitched hit | 1100 Hz | 35 ms |
+| 1 / 01 | Rim-click-like pitched hit | 1550 Hz | 18 ms |
+| 2 / 10 | High tom-like pitched hit | 2100 Hz | 50 ms |
+| 3 / 11 | Short snare-like filtered noise | 2800 Hz | 25 ms |
+
+These are synthetic timbres, not sampled recordings of instruments. Slots remain 250 ms (4 baud, 8 raw bits/s) or 200 ms (5 baud, 10 raw bits/s), with 160 ms hits and 90/40 ms silent guards. Peak amplitude is normalized per hit to 0.45; envelope is `exp(-t/decay) * min(1,t/.002,(hitSamples-1-i)/(rate*.004))`. Pitched hits sweep from `1.03*center` toward `0.98*center` with 30 ms exponential time constant, using the same integrated sine phase formula as dictionary 01. Snare uses the existing unsigned LCG seeded `0x43415644 + 3`, converted to uniform signed noise and passed through the existing biquad bandpass at 2800 Hz with Q=10. Content is concentrated around these centers, not strictly band-limited to 1–3 kHz.
+
+The receiver's four bandpass filters use Q=8 at the listed centers, narrowing the bands to separate this closer-spaced dictionary. The same normalized-energy/decay acceptance inequalities as original drums apply, without relaxed thresholds. Receiver windows remain 140 ms beginning 8 ms into a candidate symbol. Optional diagnostics use palette-specific bands and names. No template learning or runtime random dictionary generation.
+
+Framing remains `[version, dictionary, length_hi, length_lo, payload..., CRC32_be]`, 1–64 UTF-8 payload bytes, MSB-first two-bit symbols. CRC-32/ISO-HDLC covers the header and untouched payload. Default slot version is 04; 200 ms version is 05; dictionary byte is **02**. The 24-symbol preambles are distinct from dictionary 01:
+
+- 250 ms: `123010233012032112033210`; header prefix `04 02`.
+- 200 ms: `210323100321301221300123`; header prefix `05 02`.
+- Exact `hi` frame at 250 ms: `04 02 00 02 68 69 ca 5d 5c e8`.
+- Exact `hi` frame at 200 ms: `05 02 00 02 68 69 01 01 8f 4d`.
+
+Preamble acquisition, expected prefix validation and CRC protect against wrong-palette or wrong-speed delivery; corruption can prevent acquisition rather than produce an explicit frame error. Maximum frame durations remain 78.00/62.40 seconds at 250/200 ms. Tests include all cross-palette/speed combinations, including incompatible headers carried on the receiver's own waveform.
