@@ -1,6 +1,6 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
-const files=new Set(['index.html','app.js','modem.js','drums.js','capture-worklet.js','style.css','browser-check.html']);
+const files=new Set(['index.html','app.js','modem.js','drums.js','cw.js','capture-worklet.js','style.css','browser-check.html']);
 const server=http.createServer(async(req,res)=>{
   const name=new URL(req.url,'http://localhost').pathname.slice(1)||'index.html';
   if(!files.has(name)) { res.writeHead(404);res.end('Not found');return; }

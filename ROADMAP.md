@@ -46,3 +46,7 @@ Next gate: test short messages on two devices, especially kick reproduction and 
 ### Drum speed comparison
 
 Local `drum2` adds experimental 200 ms slots (160 ms hits, 40 ms guards) beside the compatible 250 ms default (90 ms guards). Compare both endpoints at matching settings, short messages first, recording exact CRC-passing reception and room/device conditions. The extra speed is 10 versus 8 raw bits/s; shorter guards may reduce echo tolerance. Neither speed is physically qualified. Compact alphabets remain out of scope.
+
+## Active experiment — plain CW
+
+`cw1` adds genuine keyed 700 Hz International Morse at 8/12/16 WPM, with explicit normalization, a small supported character set, silence finalization and unverified text diagnostics. All framed FSK/drum modes remain separate and unchanged. Next gate: two-device short-message trials with matching WPM, noting spacing errors and missed marks; no physical CW success claimed. Arbitrary hand-keyed speed detection and Farnsworth timing are deferred.

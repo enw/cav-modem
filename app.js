@@ -1,7 +1,8 @@
+import {cwProfile,normalizeCW,cwDuration,synthesizeCW,detectCW,CWReceiver} from './cw.js?rev=cw1';
 import {encode,synthesize,Receiver,detectTone,PROFILES,drumProfile,musicalProfile,frameDuration} from './modem.js?rev=drum2';
 const $=id=>document.getElementById(id);
-const BUILD='settings1';
-const profileControls=['mode','drum-speed','tone-count','tonic','scale','order'];
+const BUILD='cw1';
+const profileControls=['mode','cw-speed','drum-speed','tone-count','tonic','scale','order'];
 export const SETTINGS_KEY='cav-modem.settings.v1';
 const supported=(control,value)=>typeof value==='string'&&Array.from(control.options).some(option=>!option.disabled&&option.value===value);
 export function restoreSettings(controls,getStorage=()=>window.localStorage) {
@@ -18,7 +19,7 @@ export function saveSettings(controls,getStorage=()=>window.localStorage) {
   } catch {} // Quota/security failures must not interrupt normal modem use.
 }
 restoreSettings(profileControls.map($));
-const selectedProfile=()=>$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):$('mode').value==='drums'?drumProfile(Number($('drum-speed').value)):PROFILES[$('mode').value];
+const selectedProfile=()=>$('mode').value==='cw'?cwProfile(Number($('cw-speed').value)):$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):$('mode').value==='drums'?drumProfile(Number($('drum-speed').value)):PROFILES[$('mode').value];
 const radioMessages=['CQ CQ DE TEST','RST 599 TNX FER QSO','QTH BROOKLYN NY','TNX FER CONTACT 73','QRL? CQ CQ','SOLID COPY TNX 73'];
 let radioIndex=0;
 $('radio-message').onclick=()=>{
@@ -30,6 +31,7 @@ let context,stream,source,capture,receiver,epoch=0,active=false;
 function showTrace(tone=-1) {
   if(!$('trace-panel').open||!receiver)return;
   const t=receiver.trace,profile=receiver.profile;
+  if(profile.id==='cw') { $('trace').textContent=`${t.state}\n700 Hz probe: ${tone<0?'off/uncertain':'on'}\nLast 64 marks: ${t.marks}\nCurrent character: ${t.code}\nProvisional text: ${t.text}\nNo checksum or integrity guarantee.`;return; }
   const symbol=id=>profile.names?`${id}:${profile.names[id]}`:`${id}@${profile.dictionary[id].map(hz=>hz.toFixed(1)).join('+')}Hz`;
   $('trace').textContent=`${t.state}
 Last result: ${receiver.traceResult}
@@ -44,10 +46,21 @@ function status(text) { $('status').textContent=text; }
 function update() {
   $('radio-message').disabled=active;
   for(const id of profileControls) $(id).disabled=active;
+  $('cw-controls').hidden=$('mode').value!=='cw';
   $('drum-controls').hidden=$('mode').value!=='drums';
   $('music-controls').hidden=$('mode').value!=='musical';
   const profile=selectedProfile();
   $('music-summary').textContent=profile.id==='musical'?`Experimental · ${profile.range[0].toFixed(1)}–${profile.range[1].toFixed(1)} Hz · closest gap ${profile.minGap.toFixed(2)} Hz · ${profile.seconds*1000} ms symbols. ${profile.microtonal?'64 uses scale notes plus logarithmic midpoints (microtonal), not 64 consecutive scale notes. ':''}Higher pitches may be weak on speakers or microphones; no physical reliability established.`:'';
+  if(profile.id==='cw') {
+    let valid=false;
+    try {
+      const text=normalizeCW($('message').value);valid=true;
+      $('count').textContent=`${text.length} / 64 normalized characters · ${cwDuration(text,profile,context?.sampleRate).toFixed(2)} seconds including ending silence · ${profile.wpm} WPM`;
+      $('cw-normalized').textContent=`Will send: ${text}`;
+    } catch(error) { $('count').textContent=error.message;$('cw-normalized').textContent='Unsupported text is not transmitted.'; }
+    $('profile-details').textContent=`Plain International Morse · 700 Hz · ${profile.wpm} WPM · ${(profile.seconds*1000).toFixed(1)} ms dot · match speed on both devices · no CRC`;
+    $('send').disabled=active||!valid;$('listen').disabled=active;$('stop').disabled=!active;return;
+  }
   const seconds=context?Math.round(context.sampleRate*profile.seconds)/context.sampleRate:profile.seconds;
   const rate=`${(1/seconds).toFixed(2)} baud · ${(profile.bits/seconds).toFixed(2)} raw bits/s`;
   const dictionary=profile.names?`kick / snare / hi-hat / tom · 160 ms hit + ${Math.round(profile.seconds*1000)-160} ms guard`:profile.dictionary.map(pair=>pair.map(hz=>Number(hz.toFixed(2))).join('+')).join(' / ')+' Hz';
@@ -78,7 +91,7 @@ async function start(mode) {
     if(audio.state!=='running') throw new Error('Audio is suspended. Try again from a button click.');
     audio.onstatechange=()=>{if(token===epoch && audio.state==='suspended') stop('Audio suspended. Keep the tab awake and try again.');};
     if(mode==='send') {
-      const samples=synthesize(encode($('message').value,profile),audio.sampleRate,profile);
+      const samples=profile.id==='cw'?synthesizeCW($('message').value,audio.sampleRate,profile):synthesize(encode($('message').value,profile),audio.sampleRate,profile);
       const buffer=audio.createBuffer(1,samples.length,audio.sampleRate);buffer.copyToChannel(samples,0);
       source=audio.createBufferSource();source.buffer=buffer;source.connect(audio.destination);
       source.onended=()=>{if(token===epoch) stop('Playback complete. Remote receipt is not confirmed.');};
@@ -97,10 +110,11 @@ async function start(mode) {
     const settings={build:BUILD,mode:profile.name,profilePrefix:profile.prefix,symbolMilliseconds:1000*Math.round(audio.sampleRate*profile.seconds)/audio.sampleRate,audioSampleRate:audio.sampleRate,microphone:track.label||'Default input',capture:track.getSettings()};
     const toneWindow=new Float32Array(Math.round(audio.sampleRate*profile.seconds*.5));let toneFilled=0;
     const showDetails=()=>{ $('diagnostics').textContent=JSON.stringify({...settings,syncs,failures,frames},null,2); };
-    receiver=new Receiver(audio.sampleRate,event=>{
-      if(event.type==='message') { frames++; $('received').textContent=event.text; $('checksum').textContent=`${profile.name} · CRC-32 passed · exact UTF-8 frame`;status('Valid message received. Still listening…'); }
-      else if(event.type==='error') { failures++; $('checksum').textContent=`Latest frame rejected: ${event.message}. Prior received text is unchanged.`;status(`${event.message}. Listening for the next frame…`); }
-      else { syncs++; status('Signal synchronized. Receiving frame…'); }
+    receiver=new (profile.id==='cw'?CWReceiver:Receiver)(audio.sampleRate,event=>{
+      if(event.type==='message'&&profile.id==='cw') {frames++;$('received-title').textContent='Decoded Morse (unverified)';$('received').textContent=event.text;$('checksum').textContent='Plain Morse · no CRC or integrity guarantee';status('Morse finalized after silence. Still listening…');}
+      else if(event.type==='message') { $('received-title').textContent='Received text';frames++; $('received').textContent=event.text; $('checksum').textContent=`${profile.name} · CRC-32 passed · exact UTF-8 frame`;status('Valid message received. Still listening…'); }
+      else if(event.type==='error') { failures++; $('checksum').textContent=`Latest input rejected: ${event.message}. Prior received text is unchanged.`;status(`${event.message}. Listening for the next frame…`); }
+      else { syncs++; status(profile.id==='cw'?'Receiving plain Morse · unverified…':'Signal synchronized. Receiving frame…'); }
       showDetails();
     },profile,$('trace-panel').open);
     capture=new AudioWorkletNode(audio,'capture');
@@ -116,9 +130,9 @@ async function start(mode) {
         metered+=chunk.length;
         if(metered>=audio.sampleRate*.25) {
           const rms=Math.sqrt(sum/metered), db=20*Math.log10(Math.max(rms,1e-10));
-          const tone=toneFilled===toneWindow.length?detectTone(toneWindow,audio.sampleRate,0,toneWindow.length,profile):-1;
+          const tone=toneFilled!==toneWindow.length?-1:profile.id==='cw'?(detectCW(toneWindow,audio.sampleRate)?0:-1):detectTone(toneWindow,audio.sampleRate,0,toneWindow.length,profile);
           const level=rms<1e-5?'No input audio':`Input audio: ${db.toFixed(0)} dBFS`;
-          const toneLabel=tone<0?'no modem-frequency tone':profile.names?`drum-like ${profile.names[tone]} (not proof of a frame)`:`tone near ${profile.dictionary[tone].map(hz=>Number(hz.toFixed(1))).join(' + ')} Hz (not proof of a frame)`;
+          const toneLabel=tone<0?'no modem-frequency tone':profile.id==='cw'?'700 Hz keyed tone (unverified)':profile.names?`drum-like ${profile.names[tone]} (not proof of a frame)`:`tone near ${profile.dictionary[tone].map(hz=>Number(hz.toFixed(1))).join(' + ')} Hz (not proof of a frame)`;
           $('input-meter').value=Math.max(-100,Math.min(0,db));
           $('input-level').textContent=`${level} · ${toneLabel}${peak>=.98?' · input near full scale: lower sender volume':''} · ${syncs} syncs · ${failures} rejected · ${frames} received`;
           showTrace(tone);

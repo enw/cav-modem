@@ -1,7 +1,8 @@
+import {cwProfile,synthesizeCW} from '../cw.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {encode,synthesize,DUAL_PROFILE,DRUM_PROFILE,FAST_DRUM_PROFILE,musicalProfile} from '../modem.js';
-const elements=new Map(['drum-speed','drum-controls','radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'drum-speed':'250','tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
+const elements=new Map(['cw-speed','cw-controls','cw-normalized','received-title','drum-speed','drum-controls','radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'cw-speed':'12','drum-speed':'250','tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
 class Context {
@@ -134,9 +135,9 @@ test('drum speed updates rate/duration, locks while active and receives the sele
 
 test('settings validate every select, retain defaults and ignore unrelated stored fields',()=>{
   const controls=Array.from(elements.values()).filter(e=>e.options);
-  assert.equal(controls.length,6);
+  assert.equal(controls.length,7);
   const initial=controls.map(c=>c.value);
-  const saved={'mode':'musical','drum-speed':'200','tone-count':'32','tonic':'9','scale':'minor','order':'shuffled',message:'must not save',active:true};
+  const saved={'cw-speed':'16','mode':'musical','drum-speed':'200','tone-count':'32','tonic':'9','scale':'minor','order':'shuffled',message:'must not save',active:true};
   restoreSettings(controls,()=>({getItem:()=>JSON.stringify(saved)}));
   for(const c of controls)assert.equal(c.value,saved[c.id]);
   let output;saveSettings(controls,()=>({setItem:(key,value)=>{assert.equal(key,SETTINGS_KEY);output=JSON.parse(value);}}));
@@ -165,4 +166,17 @@ test('page initialization restores settings before dependent UI and never resume
   assert.equal(el('tone-count').value,'32');assert.equal(el('scale').value,'minor');assert.equal(el('music-controls').hidden,false);assert.match(el('profile-details').textContent,/32-tone A4 natural minor.*shuffled/);
   assert.equal(contexts.length,before);assert.equal(el('stop').disabled,true);assert.equal(memory.size,1);
   delete window.localStorage;
+});
+
+test('CW UI normalizes explicitly, rejects unsupported text, persists speed and receives without CRC claims',async()=>{
+  el('mode').value='cw';el('mode').onchange();assert.equal(el('cw-controls').hidden,false);
+  el('message').value='  cq   test  ';el('message').oninput();assert.equal(el('cw-normalized').textContent,'Will send: CQ TEST');assert.match(el('count').textContent,/7 \/ 64 normalized/);
+  el('message').value='Café';el('message').oninput();assert.equal(el('send').disabled,true);assert.match(el('count').textContent,/Unsupported/);
+  el('radio-message').onclick();assert.equal(el('send').disabled,false);assert.match(el('profile-details').textContent,/no CRC/);
+  el('cw-speed').value='8';el('cw-speed').onchange();assert.match(el('count').textContent,/8 WPM/);
+  el('trace-panel').open=true;el('trace-panel').ontoggle();getMedia=async()=>makeStream();el('listen').onclick();await flush();assert.equal(el('cw-speed').disabled,true);
+  const a=synthesizeCW('CQ TEST',48000,cwProfile(8));for(let i=0;i<a.length;i+=2048)worklet.port.onmessage({data:a.subarray(i,i+2048)});
+  assert.equal(el('received').textContent,'CQ TEST');assert.match(el('checksum').textContent,/no CRC/);assert.match(el('received-title').textContent,/unverified/);assert.match(el('trace').textContent,/No checksum/);
+  el('stop').onclick();assert.match(el('trace').textContent,/cleared/);assert.equal(el('cw-speed').disabled,false);
+  el('mode').value='fsk';el('mode').onchange();assert.equal(el('cw-controls').hidden,true);
 });

@@ -4,6 +4,8 @@
 
 A small browser page that sends short UTF-8 text through a speaker and receives it through a microphone. Selectable classic four-tone FSK, dual-tone pairs, or experimental musical FSK, 64-byte payloads, CRC-32, and Send / Listen / Stop. Select the same mode and settings on both devices. Classic and dual-tone run at 50 raw bits/s; musical rates depend on pitch spacing and are displayed on the page. Messages stay local; there is no backend message transport.
 
+**CW / Morse (local `cw1` experiment):** readable keyed 700 Hz Morse at 8, 12 (default), or 16 WPM. Supports letters, digits, spaces and `. , ? / = + - @`; explicitly uppercases/collapses whitespace and rejects unsupported characters. Both devices must select CW and matching speed. Output is plain, **unverified text without CRC**, finalized after ending silence. The page shows normalized text and actual duration. Speed is remembered with the other dropdowns; no audio starts automatically. See [wire protocol](WIRE-FORMAT.md#plain-cw--morse-cw1) for timing and limitations. Existing FSK and drum modes retain their framed CRC checks.
+
 ## Run locally
 
 With Node.js installed:

@@ -42,3 +42,10 @@ Build `drum2`: 47 automated tests pass; Chrome silent AudioWorklet suite passes 
 - [x] 16 Persist all six dropdown settings in versioned localStorage (`cav-modem.settings.v1`). Validate each saved string against current options; restore before dependent UI; retain hidden-mode choices; swallow read/parse/write failures. No message/audio/activity storage or automatic audio start.
 
 Persistence validation: 49 automated tests, including all supported option values, invalid/stale types and values, malformed JSON, security/quota failures, stored-field whitelist and module reinitialization. Chrome reload checks preserve musical 32/A4/minor/shuffled and drums/200 ms with correct rates/durations and inactive microphone. Local commit only. Previous drum2 publication verified at commit 369b53f; Pages workflow 41319287778 succeeded.
+
+- [x] 17 Add plain CW/Morse transmit/receive, 700 Hz and 8/12/16 WPM, standard timing, explicit supported characters/normalization, unverified text, bounded mark diagnostics, Stop/reset and persisted speed. No changes to existing wire profiles.
+- [ ] 18 Qualify physical CW reception in both directions; distinguish character mistakes and incomplete text from CRC-protected frame results.
+
+CW validation: 55 automated tests pass, covering all 44 mapped characters, whitespace/case and unsupported text, exact timing/duration, 44.1/48 kHz at all speeds, quiet gain/noise/phase inversion/resampling stretch, ambiguous marks/gaps, unknown codes, silence, repeated transmissions, reset and UI lifecycle. No microphone or audible playback used. User separately reports iPhone-to-computer classic four-tone FSK success; this is informal physical evidence, not a full reliability benchmark.
+
+CW browser verification: separate Chrome tab passes all 24 framed profiles plus plain CW at all three speeds through silent OfflineAudioContext/AudioWorklet capture. CW mode shows the supported alphabet, normalized radio example and 12.20-second duration for CQ CQ DE TEST at 12 WPM. Existing live drum receiver was not reloaded or reconfigured.
