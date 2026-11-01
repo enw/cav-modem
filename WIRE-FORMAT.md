@@ -156,3 +156,21 @@ Frozen frame-byte vectors, excluding preamble and tail padding:
 Musical detection uses the baseline gain-relative winning-tone/purity rules across the whole selected dictionary with the longer analysis window. Receive buffering grows geometrically only up to the bounded declared frame, avoiding a full frame copy on every incoming batch; the validated length is cached during capture. Stop discards all state. Failed frames resume synchronization search. Longer musical frames have longer bounded sample deadlines than the original 12.32-second profiles.
 
 Musical verification: 29 Node tests pass. Configuration/descriptor generation and individual-tone classification cover all 240 count/key/scale/order combinations. Maximum UTF-8 acoustic round trips and channel simulations cover all 20 count/scale/order combinations at C4; tests include 3/5/6-bit padding, wrong profiles, corruption, truncation, noise, gain, resampling and ±250 ppm drift. Chrome offline AudioWorklet checks pass 22 profiles (classic, dual, and those 20 musical combinations) at gain 0.005. These are deterministic software fixtures, not physical microphone or listening tests.
+
+## Drum samples — experimental profile 04, dictionary 01
+
+Both endpoints select **Drum samples**. Existing tone profiles are unchanged. Slots are `round(sampleRate × 0.25)` samples (4 baud, 8 raw bits/s); one 160 ms hit followed by 90 ms silence, without overlap. Symbols map MSB-first as `00=kick`, `01=snare`, `10=hi-hat`, `11=tom`. Preamble: `012303122301321001322103` (24 hits, 6 seconds).
+
+Header bytes: `04 01 length_hi length_lo`, then 1–64 untouched UTF-8 payload bytes, then the existing big-endian CRC-32/ISO-HDLC over the complete header and payload. The profile and dictionary bytes must match. No padding is needed at two bits/symbol. Frozen vector: text `hi` → `04 01 00 02 68 69 8d fd 26 38`. Duration is `14 + payloadBytes` seconds: 16 seconds for `hi`, 78 seconds for 64 bytes. This is a sound experiment, not a speed upgrade.
+
+Dictionary generation is fixed in `drums.js` (Float32 PCM at the audio context's sample rate). For hit sample i, t=i/rate, H=round(rate×.16): multiply the source by `exp(-t/decay) × min(1,t/.002,(H-1-i)/(rate×.004))`; normalize each hit to peak .45. Remaining slot samples are zero. Generator/filter state resets for every hit.
+
+- Kick: decay .05 seconds; sine phase `2π × (100t + 80×.03×(1-exp(-t/.03)))` (180→100 Hz sweep).
+- Tom: decay .05 seconds; sine phase `2π × (450t + 250×.03×(1-exp(-t/.03)))` (700→450 Hz sweep).
+- Snare / hi-hat: decay .035 seconds; seeded noise through a bandpass centered at 1800 / 6000 Hz, Q=1.2. Initialize unsigned state to `0x43415644 + symbolID`; before each noise sample set `state=(1664525×state+1013904223) mod 2^32`, then `x=2×state/2^32-1`. No downloaded recording or runtime random source.
+
+Bandpass recurrence (zero initial state): `w=2πf/rate`, `alpha=sin(w)/(2Q)`, `b=alpha/(1+alpha)`, `a1=-2cos(w)/(1+alpha)`, `a2=(1-alpha)/(1+alpha)`; `y[n]=b(x[n]-x[n-2])-a1*y[n-1]-a2*y[n-2]`. Float rounding may differ slightly across sample rates; reception compares features, not exact PCM.
+
+Receiver scans at 1/16-slot steps, examining 140 ms starting 8 ms into each candidate slot. Four Q=1.2 bandpass energy measurements at 145/1800/6000/550 Hz select the dictionary symbol only if the largest exceeds 2.5× the runner-up and 60% of summed band energy. First-half input energy must exceed 1.5× second-half energy (decay check); mean energy below 1e-10 is rejected. These normalized features avoid phase-sensitive correlation. Uncertain hits, invalid lengths/dictionaries, truncation and failed checksums cannot deliver text. The existing bounded trace shows drum names and provisional bytes.
+
+Qualification is synthetic only: gain/noise, mild low-pass filtering, 18 ms decaying echo, onset offset, 44.1/48 kHz resampling and 150 ppm stretch are covered. These are limited channel models. Small speakers may lose the kick, microphones may suppress transient/noise sounds, and rooms can smear decay or bridge guards. Long-frame clock drift, strong reverberation and physical reliability remain open. Start physical testing with short text, matching modes, foreground tabs and explicit microphone permission; compare with classic FSK under the same conditions.

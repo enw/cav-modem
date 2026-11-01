@@ -1,3 +1,4 @@
+import {drumSample,detectDrum,DRUM_NAMES} from './drums.js?rev=drum1';
 const FSK_PREAMBLE = [0,3,0,3,0,3,0,3,1,2,3,0,2,1,0,3,2,2,0,1,3,1,2,0];
 const DUAL_PREAMBLE = [3,0,3,0,3,0,3,0,2,1,0,3,1,2,3,0,1,1,3,2,0,2,1,3];
 function profile(id,name,version,dictionary,preamble,options={}) {
@@ -8,7 +9,8 @@ function profile(id,name,version,dictionary,preamble,options={}) {
 }
 export const PROFILE = profile('fsk','Four-tone FSK',1,[[1200],[1600],[2000],[2400]],FSK_PREAMBLE);
 export const DUAL_PROFILE = profile('dual','Dual-tone pairs',2,[[900,1900],[900,2300],[1300,1900],[1300,2300]],DUAL_PREAMBLE);
-export const PROFILES = Object.freeze({fsk:PROFILE,dual:DUAL_PROFILE});
+export const DRUM_PROFILE=profile('drums','Drum samples',4,[[145],[1800],[6000],[550]],Array.from('012303122301321001322103',Number),{seconds:.25,prefix:Object.freeze([4,1]),headerBytes:4,names:DRUM_NAMES});
+export const PROFILES = Object.freeze({fsk:PROFILE,dual:DUAL_PROFILE,drums:DRUM_PROFILE});
 export const PREAMBLE = PROFILE.preamble;
 export const TONICS = Object.freeze(['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B']);
 export const SHUFFLE_SEED = 0x43415631;
@@ -109,6 +111,7 @@ export function synthesize(bytes,rate,profile=PROFILE) {
   checkSampleRate(rate,profile);
   const tones=symbols(bytes,profile), n=Math.round(rate*profile.seconds), ramp=Math.round(rate*0.002);
   const samples=new Float32Array(tones.length*n);
+  if(profile.id==='drums') {const hits=profile.names.map((_,id)=>drumSample(id,rate));tones.forEach((id,i)=>samples.set(hits[id],i*n));return samples;}
   for (let s=0;s<tones.length;s++) for(let i=0;i<n;i++) {
     const gain=Math.min(1,i/ramp,(n-1-i)/ramp);
     const pair=profile.dictionary[tones[s]];
@@ -117,6 +120,7 @@ export function synthesize(bytes,rate,profile=PROFILE) {
   return samples;
 }
 export function detectTone(samples,rate,begin=0,count=Math.round(rate*.02),profile=PROFILE) {
+  if(profile.id==='drums')return detectDrum(samples,rate,begin,count);
   if(begin<0||begin+count>samples.length) return -1;
   let energy=0; const power=[];
   for(let i=0;i<count;i++) energy+=samples[begin+i]**2;
@@ -146,7 +150,7 @@ export class Receiver {
   constructor(rate,onEvent,profile=PROFILE,traceEnabled=false) {
     this.traceEnabled=traceEnabled;
     checkSampleRate(rate,profile);this.profile=profile;this.rate=rate;this.onEvent=onEvent;
-    this.n=Math.round(rate*profile.seconds);this.hop=Math.round(this.n/4);this.reset();
+    this.n=Math.round(rate*profile.seconds);this.hop=Math.round(this.n/(profile.id==='drums'?16:4));this.reset();
   }
   resetTrace(state='Searching for sync') {
     this.trace={state,symbols:[],bytes:[],symbolCount:0,pendingBits:0};this.traceValue=0;this.traceRead=0;this.traceLost=false;
@@ -180,6 +184,7 @@ export class Receiver {
     this.samples=this.buffer.subarray(0,this.samples.length-count);
   }
   tone(start) {
+    if(this.profile.id==='drums')return detectDrum(this.samples,this.rate,start+Math.round(this.rate*.008),Math.round(this.rate*.14));
     return detectTone(this.samples,this.rate,start+Math.round(this.n*.25),Math.round(this.n*.5),this.profile);
   }
   readBytes(start,count,checkPadding=true) {

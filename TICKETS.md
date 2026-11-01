@@ -25,3 +25,10 @@ Regression evidence (31 October 2026): compared `8bea97e` (`rx2`) with `32f4bc7`
 - [x] 11 Optional temporary live decode trace: bounded symbols and provisional bytes, safe ASCII preview, pending bits, sync and retained validation result; disabled when collapsed, cleared on Stop/new session, UI limited to 4 Hz. Covers classic, dual and musical packing/padding. Local build `trace1`; deployment not yet authorized.
 
 Trace validation: 35 Node tests pass, including partial bytes/pending bits, 3/5/6-bit padding rejection, checksum/truncation rejection, new-frame reset, Stop and safe preview rendering. Chrome synthetic AudioWorklet validation passes all 22 profiles with exact traced frame bytes. No microphone activation or physical trace test.
+
+- [x] 12 Implement fixed drum-sample profile 04/dictionary 01, 4 baud, normalized spectral/decay detection, bounded trace identities, wire vectors and simulated channel checks. Existing modes retained.
+- [ ] 13 Qualify drum mode over real speaker/microphone paths, beginning with short messages and matching profiles; compare kick/hat reproduction and record success/failure both directions. No microphone or audible playback used during implementation. Local experiment only; not published.
+
+User clarification: existing modes reportedly worked acoustically, with the older Mac receiving particularly well. The earlier four-tone issue was a human configuration/testing error, not an established decoder regression.
+
+Drum validation: 40 Node tests pass; Chrome silent OfflineAudioContext → AudioWorklet → receiver/trace passes 23 profiles including drums and all prior modes. UI mode/rate/duration verified locally. Tests cover exact UTF-8/CRC vectors, 64-byte frames, invalid dictionary/length/checksum, truncation/recovery, reset/Stop, gain .005/.5, mild filtering, 18 ms echo, resampling at 44.1/48 kHz with 150 ppm stretch, silence/noise/steady-tone/ambiguous-hit rejection. These checks do not establish physical reliability.

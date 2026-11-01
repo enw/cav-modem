@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>cav modem</title><link rel="stylesheet" href="style.css"></head>
 <body><main><p class="eyebrow">CAV MODEM · ACOUSTIC TEXT</p><h1>Send a little text<br>through the air.</h1><p>Open on two devices. Listen on one, send on the other.<br>Audible and unencrypted — use nonsecret text.</p>
-<label for="mode">Mode — match on both devices</label><select id="mode"><option value="fsk">Four-tone FSK (baseline)</option><option value="dual">Dual-tone pairs (experiment)</option><option value="musical">Musical FSK (experiment)</option></select>
+<label for="mode">Mode — match on both devices</label><select id="mode"><option value="fsk">Four-tone FSK (baseline)</option><option value="dual">Dual-tone pairs (experiment)</option><option value="drums">Drum samples (experiment)</option><option value="musical">Musical FSK (experiment)</option></select>
 <div id="music-controls" class="music-controls" hidden>
 <div><label for="tone-count">Tones</label><select id="tone-count"><option>4</option><option selected>8</option><option>16</option><option>32</option><option value="64">64 (microtonal)</option></select></div>
 <div><label for="tonic">Root</label><select id="tonic"><option value="0">C4</option><option value="1">C♯4</option><option value="2">D4</option><option value="3">E♭4</option><option value="4">E4</option><option value="5">F4</option><option value="6">F♯4</option><option value="7">G4</option><option value="8">A♭4</option><option value="9">A4</option><option value="10">B♭4</option><option value="11">B4</option></select></div>
@@ -18,4 +18,4 @@
 <details><summary>Signal and frame details</summary><p id="profile-details">Four tones · 1200 / 1600 / 2000 / 2400 Hz · 40 ms symbols · 50 raw bits/s · 64-byte limit · CRC-32</p><pre id="diagnostics">Microphone starts only when you choose Listen.</pre></details>
 <details id="trace-panel"><summary>Temporary live decode trace</summary><p class="meta">Provisional / unverified. Bytes include the header and checksum; dots replace non-ASCII bytes. Only CRC-passing messages appear as received text. Last 32 symbols and current frame only; cleared on Stop.</p><pre id="trace">Trace off. Expand while listening to inspect decoding.</pre></details>
 <p class="meta">Keep both tabs awake and in the foreground. Playback complete is not confirmation of delivery. Swap roles for a reply.</p>
-<p class="meta"><a href="https://github.com/enw/cav-modem/blob/main/WIRE-FORMAT.md">Wire protocol</a></p></main><script type="module" src="app.js?rev=trace1"></script></body></html>
+<p class="meta"><a href="https://github.com/enw/cav-modem/blob/main/WIRE-FORMAT.md">Wire protocol</a></p></main><script type="module" src="app.js?rev=drum1"></script></body></html>

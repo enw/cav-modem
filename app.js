@@ -1,13 +1,13 @@
-import {encode,synthesize,Receiver,detectTone,PROFILES,musicalProfile,frameDuration} from './modem.js?rev=trace1';
+import {encode,synthesize,Receiver,detectTone,PROFILES,musicalProfile,frameDuration} from './modem.js?rev=drum1';
 const $=id=>document.getElementById(id);
-const BUILD='trace1';
+const BUILD='drum1';
 const profileControls=['mode','tone-count','tonic','scale','order'];
 const selectedProfile=()=>$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):PROFILES[$('mode').value];
 let context,stream,source,capture,receiver,epoch=0,active=false;
 function showTrace(tone=-1) {
   if(!$('trace-panel').open||!receiver)return;
   const t=receiver.trace,profile=receiver.profile;
-  const symbol=id=>`${id}@${profile.dictionary[id].map(hz=>hz.toFixed(1)).join('+')}Hz`;
+  const symbol=id=>profile.names?`${id}:${profile.names[id]}`:`${id}@${profile.dictionary[id].map(hz=>hz.toFixed(1)).join('+')}Hz`;
   $('trace').textContent=`${t.state}
 Last result: ${receiver.traceResult}
 Input probe: ${tone<0?'no recognized tone':symbol(tone)} (not synchronized)
@@ -25,7 +25,8 @@ function update() {
   $('music-summary').textContent=profile.id==='musical'?`Experimental · ${profile.range[0].toFixed(1)}–${profile.range[1].toFixed(1)} Hz · closest gap ${profile.minGap.toFixed(2)} Hz · ${profile.seconds*1000} ms symbols. ${profile.microtonal?'64 uses scale notes plus logarithmic midpoints (microtonal), not 64 consecutive scale notes. ':''}Higher pitches may be weak on speakers or microphones; no physical reliability established.`:'';
   const seconds=context?Math.round(context.sampleRate*profile.seconds)/context.sampleRate:profile.seconds;
   const rate=`${(1/seconds).toFixed(2)} baud · ${(profile.bits/seconds).toFixed(2)} raw bits/s`;
-  $('profile-details').textContent=`${profile.name} · ${profile.dictionary.map(pair=>pair.map(hz=>Number(hz.toFixed(2))).join('+')).join(' / ')} Hz · ${(seconds*1000).toFixed(1)} ms symbols · ${rate} · 64-byte limit · CRC-32`;
+  const dictionary=profile.names?'kick / snare / hi-hat / tom · 160 ms hit + 90 ms guard':profile.dictionary.map(pair=>pair.map(hz=>Number(hz.toFixed(2))).join('+')).join(' / ')+' Hz';
+  $('profile-details').textContent=`${profile.name} · ${dictionary} · ${(seconds*1000).toFixed(1)} ms symbols · ${rate} · 64-byte limit · CRC-32`;
   const bytes=new TextEncoder().encode($('message').value).length;
   $('count').textContent=`${bytes} / 64 UTF-8 bytes${bytes>0&&bytes<=64 ? ` · ${frameDuration(bytes,profile,context?.sampleRate).toFixed(2)} seconds` : ''} · ${rate}`;
   $('send').disabled=active||bytes<1||bytes>64; $('listen').disabled=active; $('stop').disabled=!active;
@@ -66,7 +67,7 @@ async function start(mode) {
     stream=acquired;
     const track=stream.getAudioTracks()[0];
     track.onended=()=>{if(token===epoch) stop('Microphone disconnected. Choose Listen to retry.');};
-    await audio.audioWorklet.addModule('./capture-worklet.js?rev=trace1');if(token!==epoch) return;
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=drum1');if(token!==epoch) return;
     let syncs=0, failures=0, frames=0, metered=0, sum=0, peak=0;
     const settings={build:BUILD,mode:profile.name,profilePrefix:profile.prefix,symbolMilliseconds:1000*Math.round(audio.sampleRate*profile.seconds)/audio.sampleRate,audioSampleRate:audio.sampleRate,microphone:track.label||'Default input',capture:track.getSettings()};
     const toneWindow=new Float32Array(Math.round(audio.sampleRate*profile.seconds*.5));let toneFilled=0;
@@ -92,7 +93,7 @@ async function start(mode) {
           const rms=Math.sqrt(sum/metered), db=20*Math.log10(Math.max(rms,1e-10));
           const tone=toneFilled===toneWindow.length?detectTone(toneWindow,audio.sampleRate,0,toneWindow.length,profile):-1;
           const level=rms<1e-5?'No input audio':`Input audio: ${db.toFixed(0)} dBFS`;
-          const toneLabel=tone<0?'no modem-frequency tone':`tone near ${profile.dictionary[tone].map(hz=>Number(hz.toFixed(1))).join(' + ')} Hz (not proof of a frame)`;
+          const toneLabel=tone<0?'no modem-frequency tone':profile.names?`drum-like ${profile.names[tone]} (not proof of a frame)`:`tone near ${profile.dictionary[tone].map(hz=>Number(hz.toFixed(1))).join(' + ')} Hz (not proof of a frame)`;
           $('input-meter').value=Math.max(-100,Math.min(0,db));
           $('input-level').textContent=`${level} · ${toneLabel}${peak>=.98?' · input near full scale: lower sender volume':''} · ${syncs} syncs · ${failures} rejected · ${frames} received`;
           showTrace(tone);

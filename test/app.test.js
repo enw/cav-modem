@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {encode,synthesize,DUAL_PROFILE,musicalProfile} from '../modem.js';
+import {encode,synthesize,DUAL_PROFILE,DRUM_PROFILE,musicalProfile} from '../modem.js';
 const elements=new Map(['trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
@@ -82,4 +82,16 @@ test('optional trace is throttled, safe text and cleared on Stop',async()=>{
   assert.match(el('trace').textContent,/<b>hi<\/b>/);assert.equal(el('received').textContent,'<b>hi</b>');
   stop();assert.match(el('trace').textContent,/cleared/);
   el('trace-panel').open=false;el('trace-panel').ontoggle();assert.equal(el('trace').textContent,'Trace off.');
+});
+
+test('drum UI selects both roles, traces identities and releases on Stop',async()=>{
+  window.isSecureContext=true;el('mode').value='drums';el('mode').onchange();
+  assert.match(el('profile-details').textContent,/kick.*90 ms guard/);assert.match(el('count').textContent,/8.00 raw bits/);
+  el('trace-panel').open=true;el('trace-panel').ontoggle();getMedia=async()=>makeStream();
+  el('listen').onclick();await flush();assert.equal(el('mode').disabled,true);
+  const a=synthesize(encode('drums',DRUM_PROFILE),48000,DRUM_PROFILE);
+  for(let i=0;i<a.length;i+=2048)worklet.port.onmessage({data:a.subarray(i,i+2048)});
+  for(let i=0;i<6;i++)worklet.port.onmessage({data:new Float32Array(2048)});
+  assert.equal(el('received').textContent,'drums');assert.match(el('trace').textContent,/CRC-32 passed/);assert.match(el('trace').textContent,/kick|snare|hi-hat|tom/);
+  stop();assert.match(el('trace').textContent,/cleared/);assert.equal(tracks.at(-1).stopped,true);
 });

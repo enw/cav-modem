@@ -36,3 +36,9 @@ A music-friendly alphabet makes transmitted tones themselves pleasant. It does n
 - Reticulum adapter or local helper: only after a useful physical modem is demonstrated. Revisit packet size and overhead; a 64-byte text demo does not establish Reticulum compatibility. Keep identity and multi-device delivery separate.
 
 No current work adds IP/QUIC, automatic retries, FEC, hidden network message transport, or a general modulation settings panel.
+
+## Active experiment — fixed drum samples
+
+Implemented locally as `drum1`: kick, snare, hi-hat and tom, two bits per 250 ms slot. Deterministic procedural hits and a normalized spectral/decay classifier preserve existing FSK modes and CRC framing. The 160 ms hit/90 ms guard makes this a rhythm/timbre experiment at 8 raw bits/s; arbitrary recordings, sample uploads and overlapping sounds are deferred.
+
+Next gate: test short messages on two devices, especially kick reproduction and transient/noise suppression, then repeat in both directions with recorded volume/distance/browser/settings and trace results. No physical drum success is claimed. User reports the existing modes worked acoustically, particularly with the older Mac receiving; this is encouraging informal evidence, not a recorded reliability benchmark. Instrument dictionaries may follow measured drum results.
