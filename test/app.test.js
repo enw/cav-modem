@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {encode,synthesize,DUAL_PROFILE,DRUM_PROFILE,musicalProfile} from '../modem.js';
-const elements=new Map(['trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
+const elements=new Map(['radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
 class Context {
@@ -94,4 +94,21 @@ test('drum UI selects both roles, traces identities and releases on Stop',async(
   for(let i=0;i<6;i++)worklet.port.onmessage({data:new Float32Array(2048)});
   assert.equal(el('received').textContent,'drums');assert.match(el('trace').textContent,/CRC-32 passed/);assert.match(el('trace').textContent,/kick|snare|hi-hat|tom/);
   stop();assert.match(el('trace').textContent,/cleared/);assert.equal(tracks.at(-1).stopped,true);
+});
+
+test('radio examples rotate without audio, refresh counts in every mode and respect busy state',async()=>{
+  const before=contexts.length;
+  for(const mode of ['fsk','dual','drums','musical']) {
+    el('mode').value=mode;el('mode').onchange();const seen=new Set();
+    for(let i=0;i<14;i++) {
+      const old=el('message').value;el('radio-message').onclick();const text=el('message').value;
+      assert.notEqual(text,old);seen.add(text);const size=new TextEncoder().encode(text).length;
+      assert.ok(size<=64);assert.ok(el('count').textContent.startsWith(`${size} / 64 UTF-8 bytes`));assert.match(el('count').textContent,/seconds/);
+    }
+    assert.equal(seen.size,6);
+  }
+  assert.equal(contexts.length,before);
+  el('message').value='Typed text';el('message').oninput();assert.match(el('count').textContent,/10 \/ 64/);
+  el('send').onclick();await flush();assert.equal(el('radio-message').disabled,true);
+  el('radio-message').onclick();assert.equal(el('message').value,'Typed text');stop();assert.equal(el('radio-message').disabled,false);
 });

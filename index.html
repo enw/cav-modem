@@ -9,7 +9,7 @@
 <div><label for="order">Mapping</label><select id="order"><option value="ascending">Ascending</option><option value="shuffled">Shuffled (fixed seed)</option></select></div>
 <p id="music-summary" class="meta"></p>
 </div>
-<label for="message">Your message</label><textarea id="message" rows="3" placeholder="Hello across the room">Hello across the room</textarea><p id="count" class="meta"></p>
+<div class="message-heading"><label for="message">Your message</label><button id="radio-message" type="button" class="secondary" aria-controls="message">Try a radio message</button></div><textarea id="message" rows="3" placeholder="Hello across the room">Hello across the room</textarea><p id="count" class="meta"></p>
 <div class="controls"><button id="send">Send</button><button id="listen" class="secondary">Listen</button><button id="stop" class="secondary" disabled>Stop</button></div>
 <p id="status" role="status" aria-live="polite">Ready. Choose Send or Listen.</p>
 <meter id="input-meter" min="-100" max="0" value="-100" aria-label="Microphone input level in dBFS"></meter>

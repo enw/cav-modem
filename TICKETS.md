@@ -32,3 +32,5 @@ Trace validation: 35 Node tests pass, including partial bytes/pending bits, 3/5/
 User clarification: existing modes reportedly worked acoustically, with the older Mac receiving particularly well. The earlier four-tone issue was a human configuration/testing error, not an established decoder regression.
 
 Drum validation: 40 Node tests pass; Chrome silent OfflineAudioContext → AudioWorklet → receiver/trace passes 23 profiles including drums and all prior modes. UI mode/rate/duration verified locally. Tests cover exact UTF-8/CRC vectors, 64-byte frames, invalid dictionary/length/checksum, truncation/recovery, reset/Stop, gain .005/.5, mild filtering, 18 ms echo, resampling at 44.1/48 kHz with 150 ppm stretch, silence/noise/steady-tone/ambiguous-hit rejection. These checks do not establish physical reliability.
+
+- [x] 14 Add a rotating curated radio-message button beside Your message. Six short ASCII examples, immediate byte/duration refresh, no automatic transmission, disabled while active; typing retained.

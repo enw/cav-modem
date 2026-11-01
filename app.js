@@ -3,6 +3,13 @@ const $=id=>document.getElementById(id);
 const BUILD='drum1';
 const profileControls=['mode','tone-count','tonic','scale','order'];
 const selectedProfile=()=>$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):PROFILES[$('mode').value];
+const radioMessages=['CQ CQ DE TEST','RST 599 TNX FER QSO','QTH BROOKLYN NY','TNX FER CONTACT 73','QRL? CQ CQ','SOLID COPY TNX 73'];
+let radioIndex=0;
+$('radio-message').onclick=()=>{
+  if(active)return;
+  if(radioMessages[radioIndex]===$('message').value)radioIndex=(radioIndex+1)%radioMessages.length;
+  $('message').value=radioMessages[radioIndex];radioIndex=(radioIndex+1)%radioMessages.length;update();
+};
 let context,stream,source,capture,receiver,epoch=0,active=false;
 function showTrace(tone=-1) {
   if(!$('trace-panel').open||!receiver)return;
@@ -19,6 +26,7 @@ Pending bits: ${t.pendingBits}`;
 $('trace-panel').ontoggle=()=>{receiver?.setTracing($('trace-panel').open);$('trace').textContent=$('trace-panel').open?'Waiting for input; provisional / unverified.':'Trace off.';};
 function status(text) { $('status').textContent=text; }
 function update() {
+  $('radio-message').disabled=active;
   for(const id of profileControls) $(id).disabled=active;
   $('music-controls').hidden=$('mode').value!=='musical';
   const profile=selectedProfile();
