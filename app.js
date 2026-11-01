@@ -1,7 +1,23 @@
 import {encode,synthesize,Receiver,detectTone,PROFILES,drumProfile,musicalProfile,frameDuration} from './modem.js?rev=drum2';
 const $=id=>document.getElementById(id);
-const BUILD='drum2';
+const BUILD='settings1';
 const profileControls=['mode','drum-speed','tone-count','tonic','scale','order'];
+export const SETTINGS_KEY='cav-modem.settings.v1';
+const supported=(control,value)=>typeof value==='string'&&Array.from(control.options).some(option=>!option.disabled&&option.value===value);
+export function restoreSettings(controls,getStorage=()=>window.localStorage) {
+  try {
+    const saved=JSON.parse(getStorage().getItem(SETTINGS_KEY));
+    if(!saved||typeof saved!=='object'||Array.isArray(saved))return;
+    for(const control of controls)if(Object.hasOwn(saved,control.id)&&supported(control,saved[control.id]))control.value=saved[control.id];
+  } catch {} // Storage may be unavailable or contain malformed data; retain defaults.
+}
+export function saveSettings(controls,getStorage=()=>window.localStorage) {
+  try {
+    const saved={};for(const control of controls)if(supported(control,control.value))saved[control.id]=control.value;
+    getStorage().setItem(SETTINGS_KEY,JSON.stringify(saved));
+  } catch {} // Quota/security failures must not interrupt normal modem use.
+}
+restoreSettings(profileControls.map($));
 const selectedProfile=()=>$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):$('mode').value==='drums'?drumProfile(Number($('drum-speed').value)):PROFILES[$('mode').value];
 const radioMessages=['CQ CQ DE TEST','RST 599 TNX FER QSO','QTH BROOKLYN NY','TNX FER CONTACT 73','QRL? CQ CQ','SOLID COPY TNX 73'];
 let radioIndex=0;
@@ -118,7 +134,7 @@ async function start(mode) {
     status('Listening. Send from the other device.');
   } catch(error) { if(token===epoch) stop(`Unable to ${mode}: ${error.message} (${error.name}). Retry when ready.`); }
 }
-$('send').onclick=()=>start('send');$('listen').onclick=()=>start('listen');$('stop').onclick=()=>stop();$('message').oninput=update;for(const id of profileControls) $(id).onchange=()=>{stop('Mode changed. Select the same mode on the other device.');$('diagnostics').textContent=`Receiver build ${BUILD} · ${selectedProfile().name}`;};
+$('send').onclick=()=>start('send');$('listen').onclick=()=>start('listen');$('stop').onclick=()=>stop();$('message').oninput=update;for(const id of profileControls) $(id).onchange=()=>{saveSettings(profileControls.map($));stop('Mode changed. Select the same mode on the other device.');$('diagnostics').textContent=`Receiver build ${BUILD} · ${selectedProfile().name}`;};
 window.addEventListener('pagehide',()=>stop());
 $('diagnostics').textContent=`Receiver build ${BUILD}. Microphone starts only when you choose Listen.`;
 update();

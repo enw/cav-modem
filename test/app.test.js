@@ -14,7 +14,14 @@ class Context {
 globalThis.window={AudioContext:Context,isSecureContext:true,addEventListener(){}};
 Object.defineProperty(globalThis,'navigator',{value:{mediaDevices:{getUserMedia:()=>getMedia()}}});
 globalThis.AudioWorkletNode=class {constructor(){this.port={};worklet=this;}connect(){}disconnect(){}};
-const {stop}=await import('../app.js');
+// Use actual select option values so persistence validation follows the shipped UI.
+const {readFileSync}=await import('node:fs');
+const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+for(const [,id,body] of html.matchAll(/<select id="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)) {
+  const control=elements.get(id);control.id=id;
+  control.options=Array.from(body.matchAll(/<option([^>]*)>([^<]*)<\/option>/g),([,attrs,label])=>({value:attrs.match(/value="([^"]*)"/)?.[1]??label,disabled:false}));
+}
+const {stop,restoreSettings,saveSettings,SETTINGS_KEY}=await import('../app.js');
 const el=id=>elements.get(id);
 const flush=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
 const makeStream=()=>{const track={stopped:false,stop(){this.stopped=true;},getSettings(){return {sampleRate:48000};}};tracks.push(track);return {getTracks:()=>[track],getAudioTracks:()=>[track]};};
@@ -123,4 +130,39 @@ test('drum speed updates rate/duration, locks while active and receives the sele
   for(let i=0;i<a.length;i+=2048)worklet.port.onmessage({data:a.subarray(i,i+2048)});
   assert.equal(el('received').textContent,'fast');stop();assert.equal(el('drum-speed').disabled,false);
   el('drum-speed').value='250';el('drum-speed').onchange();assert.match(el('count').textContent,/8.00 raw bits/);
+});
+
+test('settings validate every select, retain defaults and ignore unrelated stored fields',()=>{
+  const controls=Array.from(elements.values()).filter(e=>e.options);
+  assert.equal(controls.length,6);
+  const initial=controls.map(c=>c.value);
+  const saved={'mode':'musical','drum-speed':'200','tone-count':'32','tonic':'9','scale':'minor','order':'shuffled',message:'must not save',active:true};
+  restoreSettings(controls,()=>({getItem:()=>JSON.stringify(saved)}));
+  for(const c of controls)assert.equal(c.value,saved[c.id]);
+  let output;saveSettings(controls,()=>({setItem:(key,value)=>{assert.equal(key,SETTINGS_KEY);output=JSON.parse(value);}}));
+  assert.deepEqual(Object.keys(output).sort(),controls.map(c=>c.id).sort());
+  for(const c of controls)for(const option of c.options) {
+    restoreSettings([c],()=>({getItem:()=>JSON.stringify({[c.id]:option.value})}));assert.equal(c.value,option.value);
+  }
+  for(const raw of ['broken','null','[]','"text"',JSON.stringify(Object.fromEntries(controls.map(c=>[c.id,'obsolete']))),JSON.stringify({mode:3,'drum-speed':200})]) {
+    const before=controls.map(c=>c.value);restoreSettings(controls,()=>({getItem:()=>raw}));assert.deepEqual(controls.map(c=>c.value),before);
+  }
+  restoreSettings(controls,()=>{throw new Error('SecurityError');});
+  saveSettings(controls,()=>{throw new Error('SecurityError');});
+  saveSettings(controls,()=>({setItem:()=>{throw new Error('QuotaExceededError');}}));
+  controls.forEach((c,i)=>c.value=initial[i]);
+});
+test('page initialization restores settings before dependent UI and never resumes audio',async()=>{
+  const memory=new Map();window.localStorage={getItem:key=>memory.get(key)??null,setItem:(key,value)=>memory.set(key,value)};
+  el('mode').value='musical';el('tone-count').value='32';el('tonic').value='9';el('scale').value='minor';el('order').value='shuffled';el('mode').onchange();
+  el('mode').value='drums';el('drum-speed').value='200';el('mode').onchange();
+  const saved=JSON.parse(memory.get(SETTINGS_KEY));assert.equal(saved['tone-count'],'32');assert.equal(saved.scale,'minor');
+  el('mode').value='fsk';el('drum-speed').value='250';const before=contexts.length;
+  await import('../app.js?reload=drums');
+  assert.equal(el('mode').value,'drums');assert.equal(el('drum-speed').value,'200');assert.equal(el('drum-controls').hidden,false);assert.match(el('count').textContent,/10.00 raw bits/);
+  el('mode').value='musical';el('mode').onchange();el('tone-count').value='8';el('scale').value='major';
+  await import('../app.js?reload=musical');
+  assert.equal(el('tone-count').value,'32');assert.equal(el('scale').value,'minor');assert.equal(el('music-controls').hidden,false);assert.match(el('profile-details').textContent,/32-tone A4 natural minor.*shuffled/);
+  assert.equal(contexts.length,before);assert.equal(el('stop').disabled,true);assert.equal(memory.size,1);
+  delete window.localStorage;
 });
