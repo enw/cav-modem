@@ -1,7 +1,8 @@
+import {DrumProbe,DRUM_NAMES} from './drums.js?rev=drumdebug1';
 import {cwProfile,normalizeCW,cwDuration,synthesizeCW,detectCW,CWReceiver} from './cw.js?rev=cw1';
 import {encode,synthesize,Receiver,detectTone,PROFILES,drumProfile,musicalProfile,frameDuration} from './modem.js?rev=drum2';
 const $=id=>document.getElementById(id);
-const BUILD='cw1';
+const BUILD='drumdebug1';
 const profileControls=['mode','cw-speed','drum-speed','tone-count','tonic','scale','order'];
 export const SETTINGS_KEY='cav-modem.settings.v1';
 const supported=(control,value)=>typeof value==='string'&&Array.from(control.options).some(option=>!option.disabled&&option.value===value);
@@ -27,6 +28,7 @@ $('radio-message').onclick=()=>{
   if(radioMessages[radioIndex]===$('message').value)radioIndex=(radioIndex+1)%radioMessages.length;
   $('message').value=radioMessages[radioIndex];radioIndex=(radioIndex+1)%radioMessages.length;update();
 };
+let drumProbe;
 let context,stream,source,capture,receiver,epoch=0,active=false;
 function showTrace(tone=-1) {
   if(!$('trace-panel').open||!receiver)return;
@@ -42,10 +44,12 @@ ASCII preview: ${t.bytes.map(b=>b>=32&&b<=126?String.fromCharCode(b):'.').join('
 Pending bits: ${t.pendingBits}`;
 }
 $('trace-panel').ontoggle=()=>{receiver?.setTracing($('trace-panel').open);$('trace').textContent=$('trace-panel').open?'Waiting for input; provisional / unverified.':'Trace off.';};
+$('drum-debug-panel').ontoggle=()=>{drumProbe=null;$('drum-debug').textContent=$('drum-debug-panel').open?'Waiting for drum input. Logs are limited to 120 records per enable.':'Debug off; cleared.';};
 function status(text) { $('status').textContent=text; }
 function update() {
   $('radio-message').disabled=active;
   for(const id of profileControls) $(id).disabled=active;
+  $('drum-debug-panel').hidden=$('mode').value!=='drums';
   $('cw-controls').hidden=$('mode').value!=='cw';
   $('drum-controls').hidden=$('mode').value!=='drums';
   $('music-controls').hidden=$('mode').value!=='musical';
@@ -70,7 +74,7 @@ function update() {
   $('send').disabled=active||bytes<1||bytes>64; $('listen').disabled=active; $('stop').disabled=!active;
 }
 export function stop(message='Stopped. Incomplete frame discarded.') {
-  epoch++; active=false;
+  epoch++; active=false;drumProbe=null;$('drum-debug-panel').open=false;$('drum-debug').textContent='Debug off; cleared.';
   if(source) { source.onended=null; try { source.stop(); } catch {} source.disconnect(); source=null; }
   if(capture) { capture.port.onmessage=null; capture.disconnect(); capture=null; }
   stream?.getTracks().forEach(track=>track.stop());stream=null;receiver?.reset();receiver=null;
@@ -123,6 +127,11 @@ async function start(mode) {
       try {
         for(const sample of event.data) { sum+=sample*sample; peak=Math.max(peak,Math.abs(sample)); }
         receiver.push(event.data);
+        if(profile.id==='drums'&&$('drum-debug-panel').open) {
+          drumProbe??=new DrumProbe(audio.sampleRate,row=>console.debug('CAV drum probe (unverified)',{...row,mode:profile.name,slotMilliseconds:profile.seconds*1000}));
+          drumProbe.push(event.data);
+        }
+
         const chunk=event.data;
         if(chunk.length>=toneWindow.length) toneWindow.set(chunk.subarray(chunk.length-toneWindow.length));
         else { toneWindow.copyWithin(0,chunk.length);toneWindow.set(chunk,toneWindow.length-chunk.length); }
@@ -136,6 +145,7 @@ async function start(mode) {
           $('input-meter').value=Math.max(-100,Math.min(0,db));
           $('input-level').textContent=`${level} · ${toneLabel}${peak>=.98?' · input near full scale: lower sender volume':''} · ${syncs} syncs · ${failures} rejected · ${frames} received`;
           showTrace(tone);
+          if(drumProbe&&$('drum-debug-panel').open)$('drum-debug').textContent=drumProbe.rows.map(r=>`${r.seconds.toFixed(2)}s window: ${r.id<0?'rejected':DRUM_NAMES[r.id]} · ${r.reason} · ratio ${r.ratio.toFixed(2)} · decay ${r.decay.toFixed(2)} · share ${r.share.toFixed(2)} · bands ${r.bandMeanSquares.map(x=>x.toExponential(2)).join('/')}`).join('\n');
           metered=0;sum=0;peak=0;
         }
       } catch(error) {stop(`Receive error: ${error.message}`);}

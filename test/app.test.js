@@ -2,7 +2,7 @@ import {cwProfile,synthesizeCW} from '../cw.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {encode,synthesize,DUAL_PROFILE,DRUM_PROFILE,FAST_DRUM_PROFILE,musicalProfile} from '../modem.js';
-const elements=new Map(['cw-speed','cw-controls','cw-normalized','received-title','drum-speed','drum-controls','radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'cw-speed':'12','drum-speed':'250','tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
+const elements=new Map(['drum-debug-panel','drum-debug','cw-speed','cw-controls','cw-normalized','received-title','drum-speed','drum-controls','radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'cw-speed':'12','drum-speed':'250','tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
 class Context {
@@ -179,4 +179,22 @@ test('CW UI normalizes explicitly, rejects unsupported text, persists speed and 
   assert.equal(el('received').textContent,'CQ TEST');assert.match(el('checksum').textContent,/no CRC/);assert.match(el('received-title').textContent,/unverified/);assert.match(el('trace').textContent,/No checksum/);
   el('stop').onclick();assert.match(el('trace').textContent,/cleared/);assert.equal(el('cw-speed').disabled,false);
   el('mode').value='fsk';el('mode').onchange();assert.equal(el('cw-controls').hidden,true);
+});
+
+test('drum debug is opt-in, bounded, independent of decoding and cleared by Stop',async()=>{
+  stop();elements.get('mode').value='drums';elements.get('drum-speed').value='250';elements.get('mode').onchange();
+  assert.equal(elements.get('drum-debug-panel').open,false);
+  getMedia=async()=>({getTracks:()=>[],getAudioTracks:()=>[{getSettings:()=>({})}]});
+  await elements.get('listen').onclick();
+  const logs=[],original=console.debug;console.debug=(...args)=>logs.push(args);
+  try {
+    elements.get('drum-debug-panel').open=true;elements.get('drum-debug-panel').ontoggle();
+    const samples=synthesize(encode('TEST',DRUM_PROFILE),48000,DRUM_PROFILE);
+    for(let i=0;i<samples.length;i+=2048)worklet.port.onmessage({data:samples.subarray(i,i+2048)});
+    assert.equal(elements.get('received').textContent,'TEST');assert.ok(logs.length>0&&logs.length<=120);
+    assert.match(elements.get('drum-debug').textContent,/window:.*ratio/);assert.ok(elements.get('drum-debug').textContent.split('\n').length<=12);
+    elements.get('drum-debug-panel').open=false;elements.get('drum-debug-panel').ontoggle();
+    const count=logs.length;worklet.port.onmessage({data:new Float32Array(2048)});assert.equal(logs.length,count);
+    stop();assert.equal(elements.get('drum-debug-panel').open,false);assert.match(elements.get('drum-debug').textContent,/cleared/);
+  } finally {console.debug=original;stop();}
 });

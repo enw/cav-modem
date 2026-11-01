@@ -49,3 +49,11 @@ Persistence validation: 49 automated tests, including all supported option value
 CW validation: 55 automated tests pass, covering all 44 mapped characters, whitespace/case and unsupported text, exact timing/duration, 44.1/48 kHz at all speeds, quiet gain/noise/phase inversion/resampling stretch, ambiguous marks/gaps, unknown codes, silence, repeated transmissions, reset and UI lifecycle. No microphone or audible playback used. User separately reports iPhone-to-computer classic four-tone FSK success; this is informal physical evidence, not a full reliability benchmark.
 
 CW browser verification: separate Chrome tab passes all 24 framed profiles plus plain CW at all three speeds through silent OfflineAudioContext/AudioWorklet capture. CW mode shows the supported alphabet, normalized radio example and 12.20-second duration for CQ CQ DE TEST at 12 WPM. Existing live drum receiver was not reloaded or reconfigured.
+
+- [x] 19 Optional pre-sync drum diagnostic panel and rate-limited main-thread console records; default off, independent observer, fixed band/ratio/decay/rejection measurements and timing, bounded state, Stop reset. No drum sample or classifier threshold changes.
+
+Live observation before this change: user's localhost Chrome receiver was listening at drum 250 ms with roughly −21 to −23 dBFS input, zero syncs/rejections/received, and an unsynchronized probe reporting no recognized tone. This identifies a pre-sync failure only, not a failing drum or proven speaker limitation. The earlier received musical-FSK text was unrelated. Existing live tab was left intact.
+
+Final automated validation: 58 tests pass, including diagnostic classifier measurements, identical on/off decoder events at both speeds, bounded 12-row display, 120-record console cap, four-per-second reporting, enable/disable and Stop reset. Physical drum diagnosis with these new measurements remains open.
+
+Final browser check: all 24 existing framed profiles and CW at 8/12/16 WPM pass the silent AudioWorklet suite, with drum observer enabled and bounds checked. Separate UI tab renders the collapsed opt-in panel and explanatory limits. No microphone or audible playback was activated; no live listening tab was reloaded.

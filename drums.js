@@ -30,14 +30,42 @@ export function drumSample(id,rate,seconds=.25) {
   return out;
 }
 // Phase-insensitive normalized band energy and decay. Reject ambiguous/steady input.
-export function detectDrum(samples,rate,begin=0,count=Math.round(rate*.14)) {
-  if(begin<0||begin+count>samples.length)return -1;
+export function inspectDrum(samples,rate,begin=0,count=Math.round(rate*.14)) {
+  if(begin<0||begin+count>samples.length)return {id:-1,reason:"incomplete window"};
   const filters=bands.map(hz=>bandpass(rate,hz)),power=[0,0,0,0];let early=0,late=0;
   for(let i=0;i<count;i++) {
     const x=samples[begin+i];if(i<count/2)early+=x*x;else late+=x*x;
     for(let b=0;b<4;b++)power[b]+=filters[b](x)**2;
   }
-  if((early+late)/count<1e-10||early<late*1.5)return -1;
-  const best=Math.max(...power),id=power.indexOf(best),second=Math.max(...power.filter((_,i)=>i!==id));
-  return best>second*2.5&&best>power.reduce((a,b)=>a+b,0)*.6?id:-1;
+  const meanSquare=(early+late)/count,best=Math.max(...power),id=power.indexOf(best),second=Math.max(...power.filter((_,i)=>i!==id));
+  const ratio=best/Math.max(second,1e-30),decay=early/Math.max(late,1e-30),share=best/Math.max(power.reduce((a,b)=>a+b,0),1e-30);
+  const reason=meanSquare<1e-10?'below energy floor':early<late*1.5?'insufficient decay':!(best>second*2.5&&best>power.reduce((a,b)=>a+b,0)*.6)?'ambiguous bands':'accepted';
+  return {id:reason==='accepted'?id:-1,reason,meanSquare,bandMeanSquares:power.map(x=>x/count),ratio,decay,share};
+}
+export function detectDrum(samples,rate,begin=0,count=Math.round(rate*.14)) {
+  return inspectDrum(samples,rate,begin,count).id;
+}
+// Optional main-thread observer. It never feeds symbols into the decoder.
+export class DrumProbe {
+  constructor(rate,report=()=>{}) {this.rate=rate;this.report=report;this.window=new Float32Array(Math.round(rate*.14));this.reset();}
+  reset() {this.window.fill(0);this.used=0;this.samples=0;this.nextReport=Math.round(this.rate*.25);this.best=null;this.rows=[];this.logs=0;}
+  push(chunk) {
+    for(const x of chunk) {
+      this.window[this.used++]=x;this.samples++;
+      if(this.used===this.window.length) {
+        const reading=inspectDrum(this.window,this.rate);
+        reading.seconds=(this.samples-this.window.length)/this.rate;
+        // Keep the strongest window in each reporting interval, not just the last silent tail.
+        if(!this.best||reading.meanSquare>this.best.meanSquare)this.best=reading;
+        const hop=Math.round(this.rate*.02);this.window.copyWithin(0,hop);this.used-=hop;
+      }
+      if(this.samples>=this.nextReport) {
+        if(this.best) {
+          const row={...this.best,observedSeconds:this.samples/this.rate};this.rows.push(row);this.rows=this.rows.slice(-12);
+          if(this.logs<120){this.report(row);this.logs++;}this.best=null;
+        }
+        this.nextReport+=Math.round(this.rate*.25);
+      }
+    }
+  }
 }
