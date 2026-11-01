@@ -1,16 +1,16 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>Modem browser check</title><body><h1>Browser audio checks</h1><p>This test uses generated samples only. No microphone, speaker playback, or network message transport.</p><button id="run">Run browser audio check</button><pre id="result">Not run</pre><button id="realtime">Run silent real-time classic check</button><button id="cancel" disabled>Stop real-time check</button><pre id="live-result">Not run</pre><script type="module">
-import {encode,synthesize,Receiver,PROFILES,musicalProfile} from './modem.js?rev=drum1';
+import {encode,synthesize,Receiver,PROFILES,FAST_DRUM_PROFILE,musicalProfile} from './modem.js?rev=drum2';
 document.querySelector('#run').onclick=async()=>{
   const result=document.querySelector('#result');result.textContent='Running…';
   try {
     const passed=[];
-    const profiles=[...Object.values(PROFILES)];
+    const profiles=[...Object.values(PROFILES),FAST_DRUM_PROFILE];
     for(const count of [4,8,16,32,64])for(const scale of ['major','minor'])for(const order of ['ascending','shuffled'])profiles.push(musicalProfile({count,scale,order}));
     for(const profile of profiles) {
     result.textContent=`Checking ${profile.name} (${passed.length+1}/${profiles.length})…`;
     const rate=48000, text='Café — 🙂', samples=synthesize(encode(text,profile),rate,profile).map(value=>value*.005), events=[];
     const audio=new OfflineAudioContext(1,samples.length+rate,rate);
-    await audio.audioWorklet.addModule('./capture-worklet.js?rev=drum1');
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=drum2');
     const receiver=new Receiver(rate,event=>events.push(event),profile,true);
     const capture=new AudioWorkletNode(audio,'capture');capture.port.onmessage=e=>receiver.push(e.data);
     const source=audio.createBufferSource();source.buffer=audio.createBuffer(1,samples.length,rate);source.buffer.copyToChannel(samples,0);
@@ -22,7 +22,7 @@ document.querySelector('#run').onclick=async()=>{
     if(!receiver.trace.state.includes('CRC-32 passed')||receiver.trace.bytes.join()!==encode(text,profile).join()||receiver.trace.pendingBits!==0)throw new Error('Trace differs from verified frame');
     passed.push(profile.name);
     }
-    result.textContent=`PASS: ${passed.length} profiles: classic FSK, dual-tone, drums, and every musical count/scale/order combination (C4). Quiet Web Audio buffers (gain 0.005) → AudioWorklet batches → exact UTF-8 + CRC + bounded decode trace. No physical path tested.`;
+    result.textContent=`PASS: ${passed.length} profiles: classic FSK, dual-tone, both drum speeds, and every musical count/scale/order combination (C4). Quiet Web Audio buffers (gain 0.005) → AudioWorklet batches → exact UTF-8 + CRC + bounded decode trace. No physical path tested.`;
   }catch(error){result.textContent='FAIL: '+error.message;}
 };
 let liveAudio;
@@ -33,7 +33,7 @@ document.querySelector('#realtime').onclick=async()=>{
   let audio;
   try {
     audio=new AudioContext();liveAudio=audio;await audio.resume();
-    await audio.audioWorklet.addModule('./capture-worklet.js?rev=drum1');
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=drum2');
     const rate=audio.sampleRate,bytes=Uint8Array.from('01000b68656c6c6f20776f726c645beb9cd6'.match(/../g),hex=>parseInt(hex,16));
     const sequence=[0,3,0,3,0,3,0,3,1,2,3,0,2,1,0,3,2,2,0,1,3,1,2,0,...Array.from(bytes).flatMap(b=>[b>>>6,(b>>>4)&3,(b>>>2)&3,b&3])];
     const n=Math.round(rate*.04),ramp=Math.round(rate*.002),lead=Math.round(rate*.137),samples=new Float32Array(lead+sequence.length*n+rate);

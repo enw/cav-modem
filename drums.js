@@ -7,9 +7,10 @@ function bandpass(rate,hz,q=1.2) {
   let x1=0,x2=0,y1=0,y2=0;
   return x=>{const y=b*(x-x2)-a1*y1-a2*y2;x2=x1;x1=x;y2=y1;y1=y;return y;};
 }
-export function drumSample(id,rate) {
+export function drumSample(id,rate,seconds=.25) {
   if(!Number.isInteger(id)||id<0||id>3)throw new Error('Invalid drum');
-  const out=new Float32Array(Math.round(rate*.25)),hit=Math.round(rate*.16);
+  if(![.25,.2].includes(seconds))throw new Error('Unsupported drum speed');
+  const out=new Float32Array(Math.round(rate*seconds)),hit=Math.round(rate*.16);
   const filter=bandpass(rate,bands[id]);let seed=(0x43415644+id)>>>0,peak=0;
   for(let i=0;i<hit;i++) {
     const t=i/rate,decay=id===0||id===3?.05:.035;

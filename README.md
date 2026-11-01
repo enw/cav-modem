@@ -24,7 +24,7 @@ npm test
 
 Open http://localhost:8080/browser-check.html and choose **Run browser audio check** for generated audio through a real browser OfflineAudioContext and AudioWorklet. Choose **Run silent real-time classic check** to feed a frozen rx2 waveform through the current real-time AudioWorklet and receiver. Neither check captures the microphone or plays sound.
 
-The current local experiment has 40 passing Node tests, including all 240 musical dictionary configurations and individual-tone classifications, variable-width padding, exact UTF-8 boundaries, wrong profiles, malformed frames, channel simulations, and mocked UI lifecycle/error handling. Chrome's offline AudioWorklet check passes 23 profiles: classic, dual-tone, drums, and all musical count/scale/order combinations at C4. No microphone is activated by these checks. Physical success has only been user-reported for a short baseline FSK message; repeated acceptance for the new profiles remains open.
+The current local experiment has 47 passing Node tests, including all 240 musical dictionary configurations and individual-tone classifications, variable-width padding, exact UTF-8 boundaries, wrong profiles, malformed frames, channel simulations, and mocked UI lifecycle/error handling. Chrome's offline AudioWorklet check passes 24 profiles: classic, dual-tone, both drum speeds, and all musical count/scale/order combinations at C4. No microphone is activated by these checks. Physical success has only been user-reported for a short baseline FSK message; repeated acceptance for the new profiles remains open.
 
 ## Try two devices
 
@@ -50,3 +50,5 @@ Expand **Temporary live decode trace** while listening for a sampled tone ID/fre
 Local build `drum1` adds **Drum samples (experiment)**: kick/snare/hi-hat/tom, one hit per 250 ms slot, 8 raw bits/s. Select it on both devices. Try `hi` first (16 seconds including framing); a 64-byte frame takes 78 seconds. Fixed procedural samples only, no uploads or dependencies. The live trace names detected drums. Physical drum reception remains unqualified; no microphone or audible playback was used for development. Existing FSK modes remain available. This local update is not yet on GitHub Pages.
 
 **Try a radio message** cycles through six short ham-radio-style examples. It replaces the text and recalculates byte count/duration without starting audio. The button is unavailable while sending or listening. No real callsigns or external generation service are used.
+
+Local build `drum2` adds **Drum speed — match on both devices**: 250 ms by default (4 baud / 8 raw bits/s), or experimental 200 ms (5 baud / 10 raw bits/s). The 250 ms setting remains compatible with `drum1`. A `hi` frame takes 16 or 12.8 seconds respectively. Mode, speed and example selection are locked during activity; neither button starts audio. No physical reliability claim applies to either speed. These changes are committed locally until a separate deployment is approved.

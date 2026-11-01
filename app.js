@@ -1,8 +1,8 @@
-import {encode,synthesize,Receiver,detectTone,PROFILES,musicalProfile,frameDuration} from './modem.js?rev=drum1';
+import {encode,synthesize,Receiver,detectTone,PROFILES,drumProfile,musicalProfile,frameDuration} from './modem.js?rev=drum2';
 const $=id=>document.getElementById(id);
-const BUILD='drum1';
-const profileControls=['mode','tone-count','tonic','scale','order'];
-const selectedProfile=()=>$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):PROFILES[$('mode').value];
+const BUILD='drum2';
+const profileControls=['mode','drum-speed','tone-count','tonic','scale','order'];
+const selectedProfile=()=>$('mode').value==='musical'?musicalProfile({count:Number($('tone-count').value),tonic:Number($('tonic').value),scale:$('scale').value,order:$('order').value}):$('mode').value==='drums'?drumProfile(Number($('drum-speed').value)):PROFILES[$('mode').value];
 const radioMessages=['CQ CQ DE TEST','RST 599 TNX FER QSO','QTH BROOKLYN NY','TNX FER CONTACT 73','QRL? CQ CQ','SOLID COPY TNX 73'];
 let radioIndex=0;
 $('radio-message').onclick=()=>{
@@ -28,12 +28,13 @@ function status(text) { $('status').textContent=text; }
 function update() {
   $('radio-message').disabled=active;
   for(const id of profileControls) $(id).disabled=active;
+  $('drum-controls').hidden=$('mode').value!=='drums';
   $('music-controls').hidden=$('mode').value!=='musical';
   const profile=selectedProfile();
   $('music-summary').textContent=profile.id==='musical'?`Experimental · ${profile.range[0].toFixed(1)}–${profile.range[1].toFixed(1)} Hz · closest gap ${profile.minGap.toFixed(2)} Hz · ${profile.seconds*1000} ms symbols. ${profile.microtonal?'64 uses scale notes plus logarithmic midpoints (microtonal), not 64 consecutive scale notes. ':''}Higher pitches may be weak on speakers or microphones; no physical reliability established.`:'';
   const seconds=context?Math.round(context.sampleRate*profile.seconds)/context.sampleRate:profile.seconds;
   const rate=`${(1/seconds).toFixed(2)} baud · ${(profile.bits/seconds).toFixed(2)} raw bits/s`;
-  const dictionary=profile.names?'kick / snare / hi-hat / tom · 160 ms hit + 90 ms guard':profile.dictionary.map(pair=>pair.map(hz=>Number(hz.toFixed(2))).join('+')).join(' / ')+' Hz';
+  const dictionary=profile.names?`kick / snare / hi-hat / tom · 160 ms hit + ${Math.round(profile.seconds*1000)-160} ms guard`:profile.dictionary.map(pair=>pair.map(hz=>Number(hz.toFixed(2))).join('+')).join(' / ')+' Hz';
   $('profile-details').textContent=`${profile.name} · ${dictionary} · ${(seconds*1000).toFixed(1)} ms symbols · ${rate} · 64-byte limit · CRC-32`;
   const bytes=new TextEncoder().encode($('message').value).length;
   $('count').textContent=`${bytes} / 64 UTF-8 bytes${bytes>0&&bytes<=64 ? ` · ${frameDuration(bytes,profile,context?.sampleRate).toFixed(2)} seconds` : ''} · ${rate}`;
@@ -75,7 +76,7 @@ async function start(mode) {
     stream=acquired;
     const track=stream.getAudioTracks()[0];
     track.onended=()=>{if(token===epoch) stop('Microphone disconnected. Choose Listen to retry.');};
-    await audio.audioWorklet.addModule('./capture-worklet.js?rev=drum1');if(token!==epoch) return;
+    await audio.audioWorklet.addModule('./capture-worklet.js?rev=drum2');if(token!==epoch) return;
     let syncs=0, failures=0, frames=0, metered=0, sum=0, peak=0;
     const settings={build:BUILD,mode:profile.name,profilePrefix:profile.prefix,symbolMilliseconds:1000*Math.round(audio.sampleRate*profile.seconds)/audio.sampleRate,audioSampleRate:audio.sampleRate,microphone:track.label||'Default input',capture:track.getSettings()};
     const toneWindow=new Float32Array(Math.round(audio.sampleRate*profile.seconds*.5));let toneFilled=0;

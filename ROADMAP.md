@@ -42,3 +42,7 @@ No current work adds IP/QUIC, automatic retries, FEC, hidden network message tra
 Implemented locally as `drum1`: kick, snare, hi-hat and tom, two bits per 250 ms slot. Deterministic procedural hits and a normalized spectral/decay classifier preserve existing FSK modes and CRC framing. The 160 ms hit/90 ms guard makes this a rhythm/timbre experiment at 8 raw bits/s; arbitrary recordings, sample uploads and overlapping sounds are deferred.
 
 Next gate: test short messages on two devices, especially kick reproduction and transient/noise suppression, then repeat in both directions with recorded volume/distance/browser/settings and trace results. No physical drum success is claimed. User reports the existing modes worked acoustically, particularly with the older Mac receiving; this is encouraging informal evidence, not a recorded reliability benchmark. Instrument dictionaries may follow measured drum results.
+
+### Drum speed comparison
+
+Local `drum2` adds experimental 200 ms slots (160 ms hits, 40 ms guards) beside the compatible 250 ms default (90 ms guards). Compare both endpoints at matching settings, short messages first, recording exact CRC-passing reception and room/device conditions. The extra speed is 10 versus 8 raw bits/s; shorter guards may reduce echo tolerance. Neither speed is physically qualified. Compact alphabets remain out of scope.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {encode,synthesize,DUAL_PROFILE,DRUM_PROFILE,musicalProfile} from '../modem.js';
-const elements=new Map(['radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
+import {encode,synthesize,DUAL_PROFILE,DRUM_PROFILE,FAST_DRUM_PROFILE,musicalProfile} from '../modem.js';
+const elements=new Map(['drum-speed','drum-controls','radio-message','trace-panel','trace','message','status','count','send','listen','stop','received','checksum','diagnostics','input-level','input-meter','mode','profile-details','tone-count','tonic','scale','order','music-controls','music-summary'].map(id=>[id,{value:id==='message'?'Hello':id==='mode'?'fsk':({'drum-speed':'250','tone-count':'8',tonic:'0',scale:'major',order:'ascending'}[id]||''),textContent:'',disabled:false}]));
 globalThis.document={getElementById:id=>elements.get(id)};
 let contexts=[],tracks=[],getMedia,worklet;
 class Context {
@@ -111,4 +111,16 @@ test('radio examples rotate without audio, refresh counts in every mode and resp
   el('message').value='Typed text';el('message').oninput();assert.match(el('count').textContent,/10 \/ 64/);
   el('send').onclick();await flush();assert.equal(el('radio-message').disabled,true);
   el('radio-message').onclick();assert.equal(el('message').value,'Typed text');stop();assert.equal(el('radio-message').disabled,false);
+});
+
+test('drum speed updates rate/duration, locks while active and receives the selected profile',async()=>{
+  el('mode').value='drums';el('mode').onchange();el('drum-speed').value='200';el('drum-speed').onchange();
+  el('message').value='hi';el('message').oninput();assert.match(el('count').textContent,/12.80 seconds.*5.00 baud.*10.00 raw bits/);
+  assert.match(el('profile-details').textContent,/40 ms guard/);
+  el('radio-message').onclick();assert.match(el('count').textContent,/10.00 raw bits/);
+  getMedia=async()=>makeStream();el('listen').onclick();await flush();assert.equal(el('drum-speed').disabled,true);
+  const a=synthesize(encode('fast',FAST_DRUM_PROFILE),48000,FAST_DRUM_PROFILE);
+  for(let i=0;i<a.length;i+=2048)worklet.port.onmessage({data:a.subarray(i,i+2048)});
+  assert.equal(el('received').textContent,'fast');stop();assert.equal(el('drum-speed').disabled,false);
+  el('drum-speed').value='250';el('drum-speed').onchange();assert.match(el('count').textContent,/8.00 raw bits/);
 });

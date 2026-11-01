@@ -1,4 +1,4 @@
-import {drumSample,detectDrum,DRUM_NAMES} from './drums.js?rev=drum1';
+import {drumSample,detectDrum,DRUM_NAMES} from './drums.js?rev=drum2';
 const FSK_PREAMBLE = [0,3,0,3,0,3,0,3,1,2,3,0,2,1,0,3,2,2,0,1,3,1,2,0];
 const DUAL_PREAMBLE = [3,0,3,0,3,0,3,0,2,1,0,3,1,2,3,0,1,1,3,2,0,2,1,3];
 function profile(id,name,version,dictionary,preamble,options={}) {
@@ -10,6 +10,12 @@ function profile(id,name,version,dictionary,preamble,options={}) {
 export const PROFILE = profile('fsk','Four-tone FSK',1,[[1200],[1600],[2000],[2400]],FSK_PREAMBLE);
 export const DUAL_PROFILE = profile('dual','Dual-tone pairs',2,[[900,1900],[900,2300],[1300,1900],[1300,2300]],DUAL_PREAMBLE);
 export const DRUM_PROFILE=profile('drums','Drum samples',4,[[145],[1800],[6000],[550]],Array.from('012303122301321001322103',Number),{seconds:.25,prefix:Object.freeze([4,1]),headerBytes:4,names:DRUM_NAMES});
+export const FAST_DRUM_PROFILE=profile('drums','Drum samples · 200 ms (experimental)',5,DRUM_PROFILE.dictionary,DRUM_PROFILE.preamble.map(id=>3-id),{seconds:.2,prefix:Object.freeze([5,1]),headerBytes:4,names:DRUM_NAMES});
+export function drumProfile(milliseconds=250) {
+  if(milliseconds===250)return DRUM_PROFILE;
+  if(milliseconds===200)return FAST_DRUM_PROFILE;
+  throw new Error('Unsupported drum speed');
+}
 export const PROFILES = Object.freeze({fsk:PROFILE,dual:DUAL_PROFILE,drums:DRUM_PROFILE});
 export const PREAMBLE = PROFILE.preamble;
 export const TONICS = Object.freeze(['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B']);
@@ -111,7 +117,7 @@ export function synthesize(bytes,rate,profile=PROFILE) {
   checkSampleRate(rate,profile);
   const tones=symbols(bytes,profile), n=Math.round(rate*profile.seconds), ramp=Math.round(rate*0.002);
   const samples=new Float32Array(tones.length*n);
-  if(profile.id==='drums') {const hits=profile.names.map((_,id)=>drumSample(id,rate));tones.forEach((id,i)=>samples.set(hits[id],i*n));return samples;}
+  if(profile.id==='drums') {const hits=profile.names.map((_,id)=>drumSample(id,rate,profile.seconds));tones.forEach((id,i)=>samples.set(hits[id],i*n));return samples;}
   for (let s=0;s<tones.length;s++) for(let i=0;i<n;i++) {
     const gain=Math.min(1,i/ramp,(n-1-i)/ramp);
     const pair=profile.dictionary[tones[s]];
